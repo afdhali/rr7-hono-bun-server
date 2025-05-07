@@ -315,4 +315,4 @@ Kontribusi selalu diterima! Silakan buat issue atau pull request untuk memperbai
 
 ## Lisensi
 
-MIT
+ALL Brought to you by [rphlmr](https://github.com/rphlmr/react-router-hono-server) with love ❤️❤️❤️
