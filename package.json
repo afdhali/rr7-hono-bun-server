@@ -5,12 +5,18 @@
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
+    "typecheck": "react-router typegen && tsc",
+    "dev:hono": "bun run server/index.ts",
+    "build:hono": "bun build ./server/index.ts --outdir ./build/server/index.js --target bun",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "start:hono": "bun run dist-server/index.js",
+    "start:all": "cross-env NODE_ENV=production bun run start && bun run dist-server/index.js",
+    "test": "vitest"
   },
   "dependencies": {
     "@react-router/node": "^7.5.3",
     "@react-router/serve": "^7.5.3",
+    "hono": "^4.7.8",
     "isbot": "^5.1.27",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -22,6 +28,8 @@
     "@types/node": "^20",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.3",
