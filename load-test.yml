@@ -1,0 +1,25 @@
+config:
+  target: "http://localhost:5173" # URL BASE untuk target API
+  processor: "./processor.js"
+  phases:
+    - duration: 1
+      arrivalCount: 10000
+      name: "10000 concurrent requests burst"
+
+  timeout: 540
+  http:
+    pool: 10000
+
+  ensure:
+    maxErrorRate: 5
+    max: 5
+
+scenarios:
+  - name: "API Concurrency Test"
+    flow:
+      - function: "generateRandomData"
+      - get:
+          url: "/api/users/1" # Path lengkap yang akan ditambahkan ke target
+          headers:
+            Content-Type: "application/json"
+            Accept: "application/json"

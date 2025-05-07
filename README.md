@@ -1,87 +1,318 @@
-# Welcome to React Router!
+# HonoStack - React Router v7 Framework Mode with Hono API
 
-A modern, production-ready template for building full-stack React applications using React Router.
+HonoStack adalah template project yang menggabungkan kekuatan React Router v7 dalam Framework Mode dengan Hono sebagai backend API. Template ini memungkinkan pengembangan full-stack dalam satu repository dengan berbagi tipe antara frontend dan backend.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## Fitur
 
-## Features
+- ⚡ React Router v7 Framework Mode untuk routing dan data loading
+- 🔥 Hono sebagai backend API yang ultra-cepat dan ringan
+- 📦 Struktur project yang terorganisir untuk API dan frontend
+- 🧩 TypeScript untuk type-safety di seluruh aplikasi
+- 🎨 Tailwind CSS untuk styling
+- ⚙️ Bun runtime untuk development dan production
+- 🔄 Hot Module Replacement (HMR) dengan Vite
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+## Prasyarat
 
-## Getting Started
+- [Bun](https://bun.sh) (v1.x atau lebih baru)
+- Node.js (v18.x atau lebih baru)
 
-### Installation
+## Instalasi
 
-Install the dependencies:
+1. Pastikan Bun sudah terinstal di sistem Anda:
 
 ```bash
-npm install
+# Install Bun
+curl -fsSL https://bun.sh/install | bash
+
+# Verifikasi instalasi
+bun --version
 ```
 
-### Development
-
-Start the development server with HMR:
+2. Clone repository dan instal dependency:
 
 ```bash
-npm run dev
+# Clone repository (ganti dengan repo Anda)
+git clone https://github.com/afdhali/rr7-honobun.git
+cd honostack
+
+# Instal dependency
+bun install
 ```
 
-Your application will be available at `http://localhost:5173`.
+## Development
 
-## Building for Production
-
-Create a production build:
+Untuk menjalankan aplikasi di mode development:
 
 ```bash
-npm run build
+bun run dev
+```
+
+Aplikasi akan berjalan di http://localhost:5173 (React Router) dengan API endpoint di http://localhost:5173/api.
+
+## Production Build
+
+Untuk membuild aplikasi untuk production:
+
+```bash
+bun run build
+```
+
+File build akan tersedia di folder `build/`.
+
+Untuk menjalankan versi production:
+
+```bash
+bun run start
+```
+
+Server akan berjalan di http://localhost:3000.
+
+## Struktur Project
+
+```
+honostack/
+├── app/                      # Direktori utama aplikasi
+│   ├── routes/               # Route React Router
+│   │   ├── _layout.tsx       # Layout utama
+│   │   ├── users.tsx         # Route untuk daftar users
+│   │   ├── users.$id.tsx     # Route untuk detail user
+│   │   └── +types/           # Type definitions untuk routes
+│   ├── server/               # Server Hono
+│   │   ├── api-routes/       # API routes
+│   │   │   ├── index.ts
+│   │   │   ├── userApi.ts
+│   │   │   └── productApi.ts
+│   │   ├── controllers/      # Controllers untuk API
+│   │   │   ├── userController.ts
+│   │   │   └── productController.ts
+│   │   ├── middlewares/      # Middlewares Hono
+│   │   │   ├── index.ts
+│   │   │   ├── loggerMiddleware.ts
+│   │   │   └── corsMiddleware.ts
+│   │   ├── models/           # Models untuk data
+│   │   │   ├── userModel.ts
+│   │   │   └── productModel.ts
+│   │   ├── utils/            # Utility functions
+│   │   │   └── responseHelper.ts
+│   │   └── index.ts          # Entry point server
+│   ├── entry.client.tsx      # Entry point client
+│   ├── entry.server.tsx      # Entry point SSR
+│   └── server.ts             # File untuk mengekspor server
+├── public/                   # File publik statis
+├── types/                    # Tipe global
+│   └── server.ts             # Tipe untuk server dan API
+├── react-router.config.ts    # Konfigurasi React Router
+├── tsconfig.json             # Konfigurasi TypeScript
+├── tailwind.config.ts        # Konfigurasi Tailwind
+└── vite.config.ts            # Konfigurasi Vite
+```
+
+## Membuat API dengan Hono
+
+### 1. Menambahkan Model
+
+Buat file model di `app/server/models/`:
+
+```typescript
+// app/server/models/exampleModel.ts
+export interface Example {
+  id: number;
+  name: string;
+  description: string;
+}
+
+export const examples: Example[] = [
+  { id: 1, name: "Example 1", description: "Description 1" },
+  { id: 2, name: "Example 2", description: "Description 2" },
+];
+
+export const ExampleModel = {
+  findAll: () => examples,
+  findById: (id: number) => examples.find((e) => e.id === id),
+  // ... method lainnya
+};
+```
+
+### 2. Menambahkan Controller
+
+Buat file controller di `app/server/controllers/`:
+
+```typescript
+// app/server/controllers/exampleController.ts
+import type { Context } from "hono";
+import { ExampleModel } from "../models/exampleModel";
+
+export const ExampleController = {
+  getAll: (c: Context) => {
+    return c.json(ExampleModel.findAll());
+  },
+
+  getById: (c: Context) => {
+    const id = parseInt(c.req.param("id"));
+    const example = ExampleModel.findById(id);
+
+    if (!example) {
+      return c.status(404).json({ error: "Example not found" });
+    }
+
+    return c.json(example);
+  },
+
+  // ... method lainnya
+};
+```
+
+### 3. Menambahkan API Route
+
+Buat file route di `app/server/api-routes/`:
+
+```typescript
+// app/server/api-routes/exampleApi.ts
+import type { Hono } from "hono";
+import { ExampleController } from "../controllers/exampleController";
+
+export const setupExampleApiRoutes = (app: Hono) => {
+  app.get("/api/examples", ExampleController.getAll);
+  app.get("/api/examples/:id", ExampleController.getById);
+  // ... endpoint lainnya
+};
+```
+
+### 4. Mengupdate API Routes Index
+
+Update file `app/server/api-routes/index.ts`:
+
+```typescript
+// app/server/api-routes/index.ts
+import type { Hono } from "hono";
+import { setupUserApiRoutes } from "./userApi";
+import { setupProductApiRoutes } from "./productApi";
+import { setupExampleApiRoutes } from "./exampleApi"; // Tambahkan ini
+
+export const setupApiRoutes = (app: Hono) => {
+  // API root endpoint
+  app.get("/api", (c) => {
+    return c.json({
+      message: "Hono API is running!",
+      // ... informasi lainnya
+    });
+  });
+
+  // Setup API routes
+  setupUserApiRoutes(app);
+  setupProductApiRoutes(app);
+  setupExampleApiRoutes(app); // Tambahkan ini
+};
+```
+
+## Mengakses API dari React Router
+
+### 1. Menambahkan Tipe untuk API Response
+
+```typescript
+// types/server.ts
+export interface Example {
+  id: number;
+  name: string;
+  description: string;
+}
+
+// ... tipe lainnya
+```
+
+### 2. Mengupdate getLoadContext di Server
+
+PENTING: Setelah membuat API, jangan lupa untuk menambahkannya ke `getLoadContext` agar bisa diakses oleh React Router loader:
+
+```typescript
+// app/server/index.ts
+import { ExampleModel } from "./models/exampleModel";
+import type { Example } from "types/server";
+
+declare module "react-router" {
+  interface AppLoadContext {
+    // ... context yang sudah ada
+    getAllExamples: () => Promise<Example[]>;
+    getExample: (id: number) => Promise<Example | null>;
+  }
+}
+
+export default await createHonoServer({
+  // ... konfigurasi lainnya
+
+  getLoadContext(c) {
+    return {
+      // ... context yang sudah ada
+
+      // Menambahkan akses ke API Examples
+      getAllExamples: async () => {
+        // Anda bisa mengakses langsung dari model (pilihan 1)
+        return ExampleModel.findAll();
+
+        // Atau melalui fetch API (pilihan 2)
+        // const baseUrl = new URL(c.req.url).origin;
+        // const response = await fetch(`${baseUrl}/api/examples`);
+        // return response.json();
+      },
+
+      getExample: async (id: number) => {
+        return ExampleModel.findById(id);
+      },
+    };
+  },
+});
+```
+
+### 3. Membuat Route React Router
+
+```typescript
+// app/routes/examples.tsx
+import { Link, useLoaderData } from "react-router";
+import type { Example } from "types/server";
+
+export async function loader({ context }) {
+  const examples = await context.getAllExamples();
+  return examples;
+}
+
+export default function Examples() {
+  const examples = useLoaderData<typeof loader>();
+
+  return (
+    <div>
+      <h1>Examples</h1>
+      <ul>
+        {examples.map((example) => (
+          <li key={example.id}>
+            <Link to={`/examples/${example.id}`}>{example.name}</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 ```
 
 ## Deployment
 
-### Docker Deployment
+HonoStack mendukung deployment di berbagai platform:
 
-To build and run using Docker:
+- **Node.js**: `bun build && bun run start`
+- **Bun**: `bun build && bun run start`
+- **Cloudflare Workers**: Menggunakan Wrangler (lihat `wrangler.toml` untuk konfigurasi)
 
-```bash
-docker build -t my-app .
+## Sumber dan Referensi
 
-# Run the container
-docker run -p 3000:3000 my-app
-```
+- [React Router v7 Documentation](https://reactrouter.com/en/main)
+- [Hono Documentation](https://hono.dev/)
+- [react-router-hono-server](https://github.com/rphlmr/react-router-hono-server)
+- [Bun Documentation](https://bun.sh/docs)
 
-The containerized application can be deployed to any platform that supports Docker, including:
+## Kontribusi
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
+Kontribusi selalu diterima! Silakan buat issue atau pull request untuk memperbaiki atau menambahkan fitur.
 
-### DIY Deployment
+## Lisensi
 
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+MIT
