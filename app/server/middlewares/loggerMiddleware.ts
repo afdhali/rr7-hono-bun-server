@@ -3,5 +3,5 @@ import type { Hono } from "hono";
 import { logger } from "hono/logger";
 
 export const setupLoggerMiddleware = (app: Hono) => {
-  app.use("*", logger());
+  app.use("/api/*", logger());
 };

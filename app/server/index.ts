@@ -22,7 +22,6 @@ declare module "react-router" {
 export default await createHonoServer({
   // Opsi untuk konfigurasi server
   defaultLogger: true,
-
   // Konfigurasi middleware dan API endpoints
   async configure(app) {
     // Setup semua middleware global
