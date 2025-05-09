@@ -18,6 +18,9 @@ declare module "react-router" {
   }
 }
 
+// Buat instance Hono app dengan tipe yang benar
+// const app = new Hono<AppEnv>();
+
 // Buat server Hono dan ekspor sebagai default
 export default await createHonoServer({
   // Opsi untuk konfigurasi server

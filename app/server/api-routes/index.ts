@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 
 import { setupUserApiRoutes } from "./userApi";
 import { setupProductApiRoutes } from "./productApi";
+import { setupAuthApiRoutes } from "./authApi";
 
 export const setupApiRoutes = (app: Hono) => {
   // API root endpoint
@@ -17,9 +18,18 @@ export const setupApiRoutes = (app: Hono) => {
         "/api/users/:id",
         "/api/products",
         "/api/products/:id",
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/auth/refresh",
+        "/api/auth/me",
+        "/api/auth/logout",
+        "/api/auth/logout-all",
       ],
     });
   });
+
+  // Setup Auth API routes
+  setupAuthApiRoutes(app);
 
   // Setup User API routes
   setupUserApiRoutes(app);

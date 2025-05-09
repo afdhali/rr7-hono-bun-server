@@ -4,11 +4,12 @@
     "**/.server/**/*",
     "**/.client/**/*",
     ".react-router/types/**/*",
-    "app/server/**/*"
+    "app/server/**/*",
+    "app/db/**/*"
   ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "hono"],
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
