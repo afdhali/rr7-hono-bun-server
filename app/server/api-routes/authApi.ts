@@ -3,22 +3,17 @@ import type { Hono, Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
-import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { requireAuth } from "../middlewares/authMiddleware";
 import type { AppVariables } from "../types";
+import {
+  getCookieOptions,
+  setAuthSignedCookie,
+  getAuthSignedCookie,
+  deleteAuthCookie,
+} from "../utils/cookie";
 
-// Cookie options helper
-const getCookieOptions = (
-  isSecure: boolean = process.env.NODE_ENV === "production"
-) => ({
-  httpOnly: true,
-  path: "/",
-  secure: isSecure,
-  sameSite: "lax" as const,
-});
-
-// Helper for setting auth cookies
-const setAuthCookies = (
+// Helper for setting auth cookies with signed cookies - now async
+const setAuthCookies = async (
   c: Context,
   {
     accessToken,
@@ -32,14 +27,14 @@ const setAuthCookies = (
     refreshTokenExpiresIn: number;
   }
 ) => {
-  // Set access token dengan expired time
-  setCookie(c, "access_token", accessToken, {
+  // Set access token dengan signed cookie
+  await setAuthSignedCookie(c, "access_token", accessToken, {
     ...getCookieOptions(),
     maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
   });
 
-  // Set refresh token dengan expired time lebih panjang
-  setCookie(c, "refresh_token", refreshToken, {
+  // Set refresh token dengan signed cookie
+  await setAuthSignedCookie(c, "refresh_token", refreshToken, {
     ...getCookieOptions(),
     maxAge: Math.floor((refreshTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
   });
@@ -47,11 +42,11 @@ const setAuthCookies = (
 
 // Helper for clearing auth cookies
 const clearAuthCookies = (c: Context) => {
-  deleteCookie(c, "access_token", {
+  deleteAuthCookie(c, "access_token", {
     ...getCookieOptions(),
   });
 
-  deleteCookie(c, "refresh_token", {
+  deleteAuthCookie(c, "refresh_token", {
     ...getCookieOptions(),
   });
 };
@@ -76,6 +71,7 @@ export const setupAuthApiRoutes = (app: Hono) => {
         const ipAddress =
           c.req.header("X-Forwarded-For") ||
           c.req.header("CF-Connecting-IP") ||
+          c.req.header("X-Real-IP") ||
           "0.0.0.0";
 
         // Determine browser/device family via user agent
@@ -101,13 +97,17 @@ export const setupAuthApiRoutes = (app: Hono) => {
           family,
         });
 
-        // Set cookies with JWT tokens
-        setAuthCookies(c, {
+        // Set signed cookies with JWT tokens
+        await setAuthCookies(c, {
           accessToken,
           refreshToken,
           accessTokenExpiresIn,
           refreshTokenExpiresIn,
         });
+
+        // Security headers for auth responses
+        c.header("Cache-Control", "no-store, max-age=0");
+        c.header("Pragma", "no-cache");
 
         // Return user tanpa password hash
         const { passwordHash, ...userWithoutPassword } = user;
@@ -132,10 +132,10 @@ export const setupAuthApiRoutes = (app: Hono) => {
   // Refresh token endpoint
   app.post("/api/auth/refresh", async (c) => {
     try {
-      // Get refresh token dari cookie
-      const refreshToken = getCookie(c, "refresh_token");
+      // Get refresh token dari signed cookie
+      const refreshToken = await getAuthSignedCookie(c, "refresh_token");
 
-      if (!refreshToken) {
+      if (refreshToken === false) {
         return c.json(
           { success: false, message: "No refresh token provided" },
           401
@@ -151,8 +151,8 @@ export const setupAuthApiRoutes = (app: Hono) => {
         user,
       } = await AuthService.refreshToken(refreshToken);
 
-      // Set new cookies
-      setAuthCookies(c, {
+      // Set new signed cookies
+      await setAuthCookies(c, {
         accessToken,
         refreshToken: newRefreshToken,
         accessTokenExpiresIn,
@@ -229,15 +229,18 @@ export const setupAuthApiRoutes = (app: Hono) => {
 
   // Updated logout route
   app.post("/api/auth/logout", async (c) => {
-    const refreshToken = getCookie(c, "refresh_token");
+    const refreshToken = await getAuthSignedCookie(c, "refresh_token");
 
-    if (refreshToken) {
+    if (refreshToken !== false) {
       // Revoke refresh token
       await AuthService.revokeRefreshToken(refreshToken);
     }
 
     // Clear cookies
     clearAuthCookies(c);
+
+    // Clear all client-side data
+    c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
 
     return c.json({ success: true });
   });
@@ -251,6 +254,9 @@ export const setupAuthApiRoutes = (app: Hono) => {
 
     // Clear cookies
     clearAuthCookies(c);
+
+    // Clear all client-side data
+    c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
 
     return c.json({ success: true });
   });

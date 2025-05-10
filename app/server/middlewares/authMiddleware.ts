@@ -1,8 +1,8 @@
 // app/server/middlewares/authMiddleware.ts
 import type { Context, Next } from "hono";
-import { getCookie } from "hono/cookie";
 import { AuthService } from "../services/auth.service";
 import type { AppVariables } from "../types";
+import { getAuthSignedCookie } from "../utils/cookie";
 
 // Tipe untuk Context yang digunakan di middleware
 type HonoContext = {
@@ -10,10 +10,11 @@ type HonoContext = {
 };
 
 export const authMiddleware = async (c: Context<HonoContext>, next: Next) => {
-  // Get token dari cookie
-  const accessToken = getCookie(c, "access_token");
+  // Get token dari signed cookie - async method
+  const accessToken = await getAuthSignedCookie(c, "access_token");
 
-  if (accessToken) {
+  // accessToken bisa string atau false (jika signature invalid)
+  if (accessToken !== false) {
     // Validate token
     const user = await AuthService.validateAccessToken(accessToken);
 

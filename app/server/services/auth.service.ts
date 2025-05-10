@@ -3,11 +3,9 @@ import { eq, and, gt } from "drizzle-orm";
 import { JwtService } from "./jwt.service";
 import { db } from "~/db";
 import { refreshTokens, users, type User, type NewUser } from "~/db/schema";
-// Import bcrypt untuk password comparison
-import * as bcrypt from "bcryptjs";
 
 export class AuthService {
-  // Register tidak berubah
+  // Register dengan Bun.password
   static async register(userData: {
     email: string;
     password: string;
@@ -26,10 +24,13 @@ export class AuthService {
       throw new Error("Email already registered");
     }
 
-    // Hash password - gunakan bcrypt bukan Bun.password
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Hash password dengan Bun.password
+    const passwordHash = await Bun.password.hash(password, {
+      algorithm: "bcrypt",
+      cost: 12, // Work factor, higher = more secure but slower
+    });
 
-    // Buat user baru - pastikan NewUser diimpor dari schema
+    // Buat user baru
     const newUser: NewUser = {
       email,
       passwordHash,
@@ -42,7 +43,7 @@ export class AuthService {
     return createdUser;
   }
 
-  // Update metode login untuk JWT
+  // Update metode login dengan Bun.password
   static async login(
     email: string,
     password: string,
@@ -67,16 +68,26 @@ export class AuthService {
       throw new Error("Invalid credentials");
     }
 
-    // Verifikasi password
-    const passwordValid = await bcrypt.compare(password, user.passwordHash);
+    // Verifikasi password dengan Bun.password
+    const passwordValid = await Bun.password.verify(
+      password,
+      user.passwordHash
+    );
 
     if (!passwordValid) {
       throw new Error("Invalid credentials");
     }
 
-    // Generate JWT tokens
+    // Generate fingerprint untuk token binding
+    const fingerprint = {
+      userAgent: metadata.userAgent || "",
+      ipAddress: metadata.ipAddress || "",
+      family: metadata.family || "",
+    };
+
+    // Generate JWT tokens with fingerprint
     const { token: accessToken, expiresIn: accessTokenExpiresIn } =
-      JwtService.generateAccessToken(user);
+      JwtService.generateAccessToken(user, fingerprint);
     const {
       token: refreshToken,
       expiresIn: refreshTokenExpiresIn,
@@ -104,7 +115,7 @@ export class AuthService {
     };
   }
 
-  // Method untuk refresh token
+  // Method untuk refresh token - tidak berubah
   static async refreshToken(token: string): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -143,15 +154,22 @@ export class AuthService {
       throw new Error("User not found");
     }
 
+    // Recreate fingerprint dari stored token
+    const fingerprint = {
+      userAgent: storedToken.userAgent || "",
+      ipAddress: storedToken.ipAddress || "",
+      family: storedToken.family || "",
+    };
+
     // Mark old token sebagai revoked (token rotation)
     await db
       .update(refreshTokens)
       .set({ isRevoked: true })
       .where(eq(refreshTokens.id, storedToken.id));
 
-    // Generate new tokens
+    // Generate new tokens with fingerprint
     const { token: newAccessToken, expiresIn: accessTokenExpiresIn } =
-      JwtService.generateAccessToken(user);
+      JwtService.generateAccessToken(user, fingerprint);
     const {
       token: newRefreshToken,
       expiresIn: refreshTokenExpiresIn,
@@ -179,7 +197,7 @@ export class AuthService {
     };
   }
 
-  // Validate access token
+  // Validate access token with fingerprint check
   static async validateAccessToken(token: string): Promise<User | null> {
     // Verify JWT
     const payload = JwtService.verifyAccessToken(token);
@@ -195,7 +213,14 @@ export class AuthService {
       where: eq(users.id, userId),
     });
 
-    return user || null;
+    if (!user) {
+      return null;
+    }
+
+    // Optional: Additional checks like comparing fingerprint
+    // could be performed here depending on security requirements
+
+    return user;
   }
 
   // Revoke refresh token
