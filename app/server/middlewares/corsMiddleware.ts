@@ -11,6 +11,7 @@ export const setupCorsMiddleware = (app: Hono) => {
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:5173",
+        "https://rr7honobun.emeshdev.com",
       ],
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
       allowHeaders: ["Content-Type", "Authorization"],

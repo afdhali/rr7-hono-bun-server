@@ -4,7 +4,6 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { requireAuth } from "../middlewares/authMiddleware";
-import type { AppVariables } from "../types";
 import {
   getCookieOptions,
   setAuthSignedCookie,

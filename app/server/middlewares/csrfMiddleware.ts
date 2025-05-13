@@ -49,6 +49,7 @@ export const setupCsrfMiddleware = (app: Hono) => {
               acceptedOrigins: [
                 "http://localhost:3000",
                 "http://localhost:5173",
+                "https://rr7honobun.emeshdev.com",
               ],
               help: 'Set request header "Origin: http://localhost:5173" in ThunderClient',
             },

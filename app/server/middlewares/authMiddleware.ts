@@ -1,17 +1,17 @@
 // app/server/middlewares/authMiddleware.ts
-import type { Context, Next } from "hono";
+import { createMiddleware } from "hono/factory";
 import { AuthService } from "../services/auth.service";
 import type { AppVariables } from "../types";
 import { getAuthSignedCookie } from "../utils/cookie";
 
-// Tipe untuk Context yang digunakan di middleware
-type HonoContext = {
+// Middleware otentikasi dengan createMiddleware
+export const authMiddleware = createMiddleware<{
   Variables: AppVariables;
-};
-
-export const authMiddleware = async (c: Context<HonoContext>, next: Next) => {
+}>(async (c, next) => {
   // Get token dari signed cookie - async method
   const accessToken = await getAuthSignedCookie(c, "access_token");
+
+  console.log(`[Auth] Path: ${c.req.path}, HasToken: ${accessToken !== false}`);
 
   // accessToken bisa string atau false (jika signature invalid)
   if (accessToken !== false) {
@@ -25,10 +25,12 @@ export const authMiddleware = async (c: Context<HonoContext>, next: Next) => {
   }
 
   await next();
-};
+});
 
 // Middleware untuk route yang memerlukan autentikasi
-export const requireAuth = async (c: Context<HonoContext>, next: Next) => {
+export const requireAuth = createMiddleware<{
+  Variables: AppVariables;
+}>(async (c, next) => {
   const user = c.var.user;
 
   if (!user) {
@@ -36,10 +38,12 @@ export const requireAuth = async (c: Context<HonoContext>, next: Next) => {
   }
 
   await next();
-};
+});
 
 // Middleware untuk role admin
-export const requireAdmin = async (c: Context<HonoContext>, next: Next) => {
+export const requireAdmin = createMiddleware<{
+  Variables: AppVariables;
+}>(async (c, next) => {
   const user = c.var.user;
 
   if (!user) {
@@ -51,4 +55,4 @@ export const requireAdmin = async (c: Context<HonoContext>, next: Next) => {
   }
 
   await next();
-};
+});
