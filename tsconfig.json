@@ -5,7 +5,8 @@
     "**/.client/**/*",
     ".react-router/types/**/*",
     "app/server/**/*",
-    "app/db/**/*"
+    "app/db/**/*",
+    "app/store/**/*"
   ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],

@@ -9,6 +9,8 @@ import {
   type CustomStartQueryOptions,
 } from "./store/api";
 import { Provider } from "react-redux";
+import { authApi } from "./store/authApi";
+import { syncServerAuth } from "./store/authSlice";
 
 export default async function handleRequest(
   request: Request,
@@ -20,6 +22,7 @@ export default async function handleRequest(
   let shellRendered = false;
   const userAgent = request.headers.get("user-agent");
   const clientOrigin = request.headers.get("origin");
+  const cookies = request.headers.get("Cookie") || "";
 
   const url = new URL(request.url);
 
@@ -30,6 +33,35 @@ export default async function handleRequest(
       userAgent: userAgent || undefined,
     },
   };
+
+  if (url.pathname.startsWith("/about")) {
+    try {
+      const cookies = request.headers.get("Cookie") || "";
+      if (
+        cookies.includes("access_token=") ||
+        cookies.includes("auth_status=authenticated")
+      ) {
+        console.log("[Server] Checking authentication for /about route");
+        const isAuthenticated = await _loadContext.isAuthenticated();
+
+        if (isAuthenticated) {
+          const user = await _loadContext.getCurrentUser();
+          if (user) {
+            console.log("[Server] User authenticated for SSR:", user.email);
+            // Hydrate auth state untuk SSR
+            store.dispatch(
+              syncServerAuth({
+                user,
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+              })
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[Server] Auth check error:", error);
+    }
+  }
 
   // RTKQ SSR
   // Pre-fetch data for certain routes

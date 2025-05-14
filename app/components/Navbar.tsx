@@ -5,17 +5,25 @@ import type { User } from "~/db/schema";
 type NavbarProps = {
   user: Omit<User, "passwordHash"> | null;
   isLoading: boolean;
+  isAuthenticated: boolean;
   onLogout: () => void;
+  dataSource?: "server" | "client" | "api";
 };
 
-export default function Navbar({ user, isLoading, onLogout }: NavbarProps) {
+export default function Navbar({
+  user,
+  isLoading,
+  isAuthenticated,
+  onLogout,
+  dataSource,
+}: NavbarProps) {
   const location = useLocation();
 
   return (
     <header className="bg-white shadow">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 justify-between">
-          {/* Left side - Logo and navigation */}
+          {/* Left side navigation */}
           <div className="flex">
             <div className="flex flex-shrink-0 items-center">
               <Link to="/" className="text-xl font-bold text-indigo-600">
@@ -50,7 +58,7 @@ export default function Navbar({ user, isLoading, onLogout }: NavbarProps) {
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
             {isLoading ? (
               <div className="h-5 w-24 animate-pulse rounded bg-gray-200"></div>
-            ) : user ? (
+            ) : isAuthenticated && user ? (
               <div className="flex items-center space-x-4">
                 <div className="text-sm font-medium text-gray-700">
                   {user.email}
@@ -75,13 +83,18 @@ export default function Navbar({ user, isLoading, onLogout }: NavbarProps) {
           {/* Mobile menu button */}
           <div className="flex items-center sm:hidden">
             <Link
-              to={user ? "/about" : "/login"}
+              to={isAuthenticated ? "/about" : "/login"}
               className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white"
             >
-              {user ? "Account" : "Login"}
+              {isAuthenticated ? "Account" : "Login"}
             </Link>
           </div>
         </div>
+        {process.env.NODE_ENV === "development" && dataSource && (
+          <span className="absolute top-1 right-1 text-xs px-1 py-0.5 bg-gray-200 rounded">
+            Data: {dataSource}
+          </span>
+        )}
       </div>
     </header>
   );

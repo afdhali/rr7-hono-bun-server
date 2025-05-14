@@ -10,6 +10,7 @@ import {
   getAuthSignedCookie,
   deleteAuthCookie,
 } from "../utils/cookie";
+import { deleteCookie, setCookie } from "hono/cookie";
 
 // Define schema secara terpisah
 const loginSchema = z.object({
@@ -121,6 +122,14 @@ export const setupAuthApiRoutes = (app: Hono) => {
         refreshTokenExpiresIn,
       });
 
+      // Add non-httpOnly cookie for client-side auth detection
+      // PENTING: Cookie ini tidak berisi data sensitif
+      await setCookie(c, "auth_status", "authenticated", {
+        ...getCookieOptions(),
+        httpOnly: false, // Pastikan bisa dibaca oleh JavaScript
+        maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000),
+      });
+
       // Security headers for auth responses
       c.header("Cache-Control", "no-store, max-age=0");
       c.header("Pragma", "no-cache");
@@ -187,6 +196,13 @@ export const setupAuthApiRoutes = (app: Hono) => {
         refreshToken: newRefreshToken,
         accessTokenExpiresIn,
         refreshTokenExpiresIn,
+      });
+
+      // Update auth_status cookie too
+      await setCookie(c, "auth_status", "authenticated", {
+        ...getCookieOptions(),
+        httpOnly: false,
+        maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000),
       });
 
       // Return user tanpa password hash
@@ -269,6 +285,12 @@ export const setupAuthApiRoutes = (app: Hono) => {
     // Clear cookies
     clearAuthCookies(c);
 
+    // Clear auth_status cookie
+    deleteCookie(c, "auth_status", {
+      ...getCookieOptions(),
+      httpOnly: false,
+    });
+
     // Clear all client-side data
     c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
 
@@ -284,6 +306,12 @@ export const setupAuthApiRoutes = (app: Hono) => {
 
     // Clear cookies
     clearAuthCookies(c);
+
+    // Clear auth_status cookie
+    deleteCookie(c, "auth_status", {
+      ...getCookieOptions(),
+      httpOnly: false,
+    });
 
     // Clear all client-side data
     c.header("Clear-Site-Data", '"cache", "cookies", "storage"');

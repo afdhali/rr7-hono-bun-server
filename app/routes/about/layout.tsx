@@ -1,88 +1,216 @@
 // routes/about/layout.tsx
-import React, { useEffect, useState } from "react";
-import { Outlet, useLoaderData, useLocation, useNavigate } from "react-router";
+import React from "react";
+import { Outlet, useLocation, useNavigate, useLoaderData } from "react-router";
 import Navbar from "~/components/Navbar";
-import { apiFetch } from "~/utils/api";
-import { setupTokenRefresh } from "~/utils/auth";
+import { useAuth } from "~/hooks/useAuth";
+import { store } from "~/store";
+import {
+  selectUser,
+  selectIsAuthenticated,
+  selectExpiresAt,
+  syncServerAuth,
+} from "~/store/authSlice";
 import type { Route } from "./+types/layout";
+import type { User } from "~/db/schema";
 
+// Type untuk loader data
+type LayoutLoaderData = {
+  auth: {
+    user: Omit<User, "passwordHash"> | null;
+    isAuthenticated: boolean;
+    expiresAt: string | null;
+    source: "server" | "client" | "api";
+  };
+};
+
+// Server-side loader
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const user = await context.getCurrentUser();
+  console.log("[AboutLayout Loader] Server-side authentication check");
+
+  try {
+    const isAuthenticated = await context.isAuthenticated();
+
+    if (isAuthenticated) {
+      const user = await context.getCurrentUser();
+
+      return {
+        auth: {
+          user,
+          isAuthenticated: true,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          source: "server" as const,
+        },
+      };
+    }
+  } catch (error) {
+    console.error("[AboutLayout Loader] Server error:", error);
+  }
 
   return {
-    user,
-    cacheKey: new Date().getTime(),
+    auth: {
+      user: null,
+      isAuthenticated: false,
+      expiresAt: null,
+      source: "server" as const,
+    },
   };
 }
 
+// Client-side loader
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  try {
+    console.log("[AboutLayout ClientLoader] Starting client-side auth check");
+
+    // 1. Coba mendapatkan data dari server loader
+    let serverData: LayoutLoaderData | null = null;
+    try {
+      serverData = (await serverLoader()) as LayoutLoaderData;
+      console.log(
+        "[AboutLayout ClientLoader] Got server data:",
+        serverData?.auth?.user?.email
+      );
+    } catch (error) {
+      console.log(
+        "[AboutLayout ClientLoader] Server loader failed or redirected"
+      );
+    }
+
+    // Jika ada server data dan user terautentikasi, gunakan itu
+    if (serverData?.auth?.isAuthenticated && serverData.auth.user) {
+      // Sync ke Redux store
+      store.dispatch(
+        syncServerAuth({
+          user: serverData.auth.user,
+          expiresAt: serverData.auth.expiresAt,
+        })
+      );
+
+      return serverData;
+    }
+
+    // 2. Jika tidak ada server data, periksa Redux store
+    const state = store.getState();
+    const storeUser = selectUser(state);
+    const storeIsAuthenticated = selectIsAuthenticated(state);
+    const storeExpiresAt = selectExpiresAt(state);
+
+    console.log(
+      `[AboutLayout ClientLoader] Redux check - Auth: ${storeIsAuthenticated}, User: ${storeUser?.email}`
+    );
+
+    if (storeIsAuthenticated && storeUser) {
+      return {
+        auth: {
+          user: storeUser,
+          isAuthenticated: true,
+          expiresAt: storeExpiresAt,
+          source: "client" as const,
+        },
+      };
+    }
+
+    // 3. Jika tidak ada di store, periksa cookies dan coba fetch dari API
+    const hasAuthCookie = document.cookie.includes("auth_status=authenticated");
+
+    if (hasAuthCookie) {
+      console.log(
+        "[AboutLayout ClientLoader] Auth cookie exists, fetching user data"
+      );
+
+      // Import RTKQ dan fetch user data
+      const { authApi } = await import("~/store/authApi");
+      const result = await store
+        .dispatch(authApi.endpoints.me.initiate())
+        .unwrap();
+
+      if (result.success && result.user) {
+        console.log(
+          "[AboutLayout ClientLoader] User fetched via API:",
+          result.user.email
+        );
+        // Gunakan perkiraan expiresAt
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+        return {
+          auth: {
+            user: result.user,
+            isAuthenticated: true,
+            expiresAt,
+            source: "api" as const,
+          },
+        };
+      }
+    }
+
+    // 4. Jika semua gagal, kembalikan auth kosong (layout akan menangani redirect jika perlu)
+    return {
+      auth: {
+        user: null,
+        isAuthenticated: false,
+        expiresAt: null,
+        source: "client" as const,
+      },
+    };
+  } catch (error) {
+    console.error("[AboutLayout ClientLoader] Client error:", error);
+    return {
+      auth: {
+        user: null,
+        isAuthenticated: false,
+        expiresAt: null,
+        source: "client" as const,
+      },
+    };
+  }
+}
+
+// Penting: Set hydrate ke true
+clientLoader.hydrate = true as const;
+
+// Komponen skeleton untuk render saat SSR
+export function HydrateFallback() {
+  return (
+    <div className="flex min-h-screen flex-col bg-gray-50">
+      {/* Navbar skeleton */}
+      <header className="bg-white shadow">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center">
+            <div className="h-8 w-32 bg-gray-200 rounded"></div>
+            <div className="h-10 w-24 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content area */}
+      <main className="flex-grow">
+        <Outlet />
+      </main>
+
+      {/* Footer skeleton */}
+      <footer className="bg-white shadow-inner mt-auto">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <div className="border-t border-gray-200 pt-4">
+            <div className="h-4 w-56 mx-auto bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 export default function Layout() {
-  const loaderData = useLoaderData();
   const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = useState(loaderData?.user || null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { auth } = useLoaderData<LayoutLoaderData>();
+  const { user, isAuthenticated, source } = auth;
 
-  // Check authentication status on route change
-  useEffect(() => {
-    // Start with server-provided user from loader
-    setUser(loaderData?.user || null);
+  // Gunakan useAuth hook untuk fungsi logout dan refresh token logic
+  const { logout } = useAuth({ autoFetch: false }); // autoFetch: false karena data sudah di-load oleh loader
 
-    const checkAuth = async () => {
-      // Skip auth check on login page
-      if (location.pathname === "/login") {
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const response = await apiFetch("/api/auth/me");
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            setUser(data.user);
-
-            // Setup token refresh if we have expiration
-            if (data.expiresAt) {
-              setupTokenRefresh(data.expiresAt, navigate);
-            }
-          } else {
-            setUser(null);
-          }
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error("Auth check failed:", error);
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    // Check auth if needed (e.g., after a potential token change)
-    if (location.pathname !== "/login") {
-      checkAuth();
-    }
-  }, [location.pathname, navigate, loaderData]);
-
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await apiFetch("/api/auth/logout", {
-        method: "POST",
-      });
-
-      setUser(null);
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-      navigate("/login");
-    }
-  };
-
-  // Don't show navbar on login page
+  // Jangan tampilkan navbar pada halaman login
   const isLoginPage = location.pathname === "/login";
   if (isLoginPage) {
     return <Outlet />;
@@ -90,10 +218,16 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
-      {/* Navbar with user info and logout button */}
-      <Navbar user={user} isLoading={isLoading} onLogout={handleLogout} />
+      {/* Navbar dengan info user dan tombol logout */}
+      <Navbar
+        user={user}
+        isLoading={false} // Data sudah tersedia dari loader
+        isAuthenticated={isAuthenticated}
+        onLogout={logout}
+        dataSource={source} // Tambahkan ini untuk debugging
+      />
 
-      {/* Main content */}
+      {/* Konten utama */}
       <main className="flex-grow">
         <Outlet />
       </main>

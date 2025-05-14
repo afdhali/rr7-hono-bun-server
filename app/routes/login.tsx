@@ -10,8 +10,11 @@ import {
   redirect,
 } from "react-router";
 import { useEffect, useState } from "react";
-import { setupTokenRefresh } from "~/utils/auth";
+import { useDispatch } from "react-redux";
+import { setCredentials } from "~/store/authSlice";
+import { useRefreshMutation } from "~/store/authApi";
 import type { Route } from "./+types/login";
+import type { User } from "~/db/schema";
 
 // Zod schema for form validation
 const loginSchema = z.object({
@@ -44,15 +47,17 @@ type ActionData = {
   redirectTo: string;
 };
 
-// In your login.tsx action
+// Server Action for login
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
 
   try {
-    // Instead of using context.loginUser, directly call the API endpoint
+    // Direct API call untuk menangani cookies dengan benar
     const apiUrl = process.env.BASE_URL || new URL(request.url).origin;
+    console.log("Login attempt via server action with:", email);
+
     const response = await fetch(`${apiUrl}/api/auth/login`, {
       method: "POST",
       headers: {
@@ -69,6 +74,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
 
     const data = await response.json();
+    console.log("Login successful, preparing redirect");
+
     const url = new URL(request.url);
     const redirectTo = url.searchParams.get("redirectTo") || "/about";
 
@@ -77,11 +84,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     // Copy cookies from the login response to the redirect response
     const cookies = response.headers.getSetCookie();
+    console.log("Cookies to forward:", cookies);
+
     for (const cookie of cookies) {
       redirectResponse.headers.append("Set-Cookie", cookie);
     }
-
-    console.log("Setting cookies on redirect:", cookies);
 
     return redirectResponse;
   } catch (error) {
@@ -100,6 +107,10 @@ export default function Login() {
   const redirectTo = searchParams.get("redirectTo") || "/about";
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  // Gunakan RTKQ refresh mutation untuk token refresh
+  const [refresh] = useRefreshMutation();
 
   // Check for session expired message
   const sessionExpired = searchParams.get("sessionExpired") === "true";
@@ -127,22 +138,71 @@ export default function Login() {
     });
   };
 
+  // Setup token refresh
+  const setupRTKQTokenRefresh = (expiresAt: string) => {
+    const expirationTime = new Date(expiresAt).getTime();
+    const now = Date.now();
+    const timeUntilExpiry = expirationTime - now;
+
+    // Refresh 1 minute before expiry
+    const refreshBuffer = 60000; // 1 minute
+    const refreshTime = Math.max(0, timeUntilExpiry - refreshBuffer);
+
+    console.log(
+      `Will refresh token in ${refreshTime / 1000} seconds using RTKQ`
+    );
+
+    const refreshTimer = setTimeout(async () => {
+      console.log("Refreshing token with RTKQ...");
+      try {
+        const result = await refresh().unwrap();
+
+        if (result.success) {
+          console.log("Token refreshed successfully via RTKQ");
+          // Update expiresAt if needed
+          if (result.expiresAt) {
+            // Setup next refresh
+            setupRTKQTokenRefresh(result.expiresAt);
+          }
+        } else {
+          console.error("Token refresh failed");
+          navigate("/login?sessionExpired=true");
+        }
+      } catch (error) {
+        console.error("Token refresh error:", error);
+        navigate("/login?sessionExpired=true");
+      }
+    }, refreshTime);
+
+    return () => clearTimeout(refreshTimer);
+  };
+
   // Redirect based on action data
   useEffect(() => {
     if (actionData?.success && actionData.redirectTo) {
-      // Setup token refresh before redirecting
-      if (actionData.expiresAt) {
-        setupTokenRefresh(actionData.expiresAt, navigate);
+      // Jika ada user dan expiresAt, setup Redux dan token refresh
+      if (actionData.user && actionData.expiresAt) {
+        // Update Redux store dengan data auth
+        dispatch(
+          setCredentials({
+            user: actionData.user as Omit<User, "passwordHash">,
+            expiresAt: actionData.expiresAt,
+            source: "server",
+          })
+        );
+
+        // Setup token refresh dengan RTKQ
+        setupRTKQTokenRefresh(actionData.expiresAt);
       }
 
-      // Redirect after a small delay to ensure token refresh is set up
+      // Redirect after a small delay
       const timer = setTimeout(() => {
         navigate(actionData.redirectTo as string);
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [actionData, navigate]);
+  }, [actionData, navigate, dispatch]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -169,6 +229,8 @@ export default function Login() {
             {/* Hidden redirect field */}
             <input type="hidden" name="redirectTo" value={redirectTo} />
 
+            {/* Form fields - unchanged */}
+            {/* ... */}
             <div>
               <label
                 htmlFor="email"
@@ -280,6 +342,35 @@ export default function Login() {
               </button>
             </div>
           </Form>
+
+          {/* Debug button - only in development */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  console.log("Debug: Manual auth check");
+                  console.log("Cookies:", document.cookie);
+                  try {
+                    const response = await fetch("/api/auth/me", {
+                      credentials: "include",
+                    });
+                    const data = await response.json();
+                    console.log("Manual ME check result:", data);
+                    if (data.success && data.user) {
+                      console.log("User is authenticated, redirecting...");
+                      navigate(redirectTo);
+                    }
+                  } catch (error) {
+                    console.error("Manual check failed:", error);
+                  }
+                }}
+                className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
+              >
+                Debug: Check Auth Status
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

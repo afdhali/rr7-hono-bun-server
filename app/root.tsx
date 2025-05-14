@@ -3,6 +3,7 @@ import {
   Links,
   Meta,
   Outlet,
+  redirect,
   Scripts,
   ScrollRestoration,
 } from "react-router";
@@ -24,6 +25,53 @@ export const links: Route.LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
   },
 ];
+
+// export const routeId = "root";
+
+// export async function loader({ request, context, params }: Route.LoaderArgs) {
+//   try {
+//     // First check server context directly
+//     const isAuthenticated = await context.isAuthenticated();
+
+//     if (!isAuthenticated) {
+//       // Try to check auth cookie directly as a fallback
+//       const hasAuthCookieValue = request.headers
+//         .get("Cookie")
+//         ?.includes("auth_status=authenticated");
+
+//       if (!hasAuthCookieValue) {
+//         const params = new URLSearchParams();
+//         params.set("redirectTo", new URL(request.url).pathname);
+//         return redirect(`/login?${params.toString()}`);
+//       }
+
+//       // If auth cookie exists but server doesn't recognize auth, try to validate via API
+//       try {
+//         const user = await context.getCurrentUser();
+//         if (!user) {
+//           const params = new URLSearchParams();
+//           params.set("redirectTo", new URL(request.url).pathname);
+//           return redirect(`/login?${params.toString()}`);
+//         }
+//         return { user };
+//       } catch (err) {
+//         console.error("Error validating auth:", err);
+//         const params = new URLSearchParams();
+//         params.set("redirectTo", new URL(request.url).pathname);
+//         return redirect(`/login?${params.toString()}`);
+//       }
+//     }
+
+//     // User is authenticated, return user data
+//     const user = await context.getCurrentUser();
+//     return { user };
+//   } catch (error) {
+//     console.error("Error in about loader:", error);
+//     const params = new URLSearchParams();
+//     params.set("redirectTo", new URL(request.url).pathname);
+//     return redirect(`/login?${params.toString()}`);
+//   }
+// }
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
