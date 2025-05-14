@@ -1,5 +1,5 @@
 // routes/about/layout.tsx
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Outlet, useLocation, useNavigate, useLoaderData } from "react-router";
 import Navbar from "~/components/Navbar";
 import { useAuth } from "~/hooks/useAuth";
@@ -205,15 +205,102 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { auth } = useLoaderData<LayoutLoaderData>();
-  const { user, isAuthenticated, source } = auth;
+  const { user, isAuthenticated, source, expiresAt: loaderExpiresAt } = auth;
 
-  // Gunakan useAuth hook untuk fungsi logout dan refresh token logic
-  const { logout } = useAuth({ autoFetch: false }); // autoFetch: false karena data sudah di-load oleh loader
+  // Status untuk refresh token
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Gunakan useAuth hook dengan autoFetch: false untuk mencegah fetching duplikat
+  const {
+    logout,
+    refreshToken, // Fungsi untuk melakukan refresh token manual
+    expiresAt, // Nilai expiresAt dari Redux store
+  } = useAuth({ autoFetch: false });
+
+  // Fungsi untuk menentukan apakah token perlu di-refresh
+  const shouldRefreshToken = useCallback(() => {
+    if (!expiresAt) return false;
+
+    const expirationTime = new Date(expiresAt).getTime();
+    const now = Date.now();
+    const timeUntilExpiry = expirationTime - now;
+
+    // Refresh jika waktu kedaluwarsa kurang dari 3 menit
+    const refreshThreshold = 3 * 60 * 1000; // 3 minutes
+
+    // Tambahkan rate limiting - jangan refresh jika baru saja di-refresh (1 menit)
+    const rateLimitThreshold = 60 * 1000; // 1 minute
+    const canRefreshAgain =
+      !lastRefresh || now - lastRefresh.getTime() > rateLimitThreshold;
+
+    return (
+      timeUntilExpiry > 0 &&
+      timeUntilExpiry < refreshThreshold &&
+      canRefreshAgain
+    );
+  }, [expiresAt, lastRefresh]);
+
+  // Jalankan interval untuk memeriksa token expiry - ini akan menjadi satu-satunya tempat
+  // di aplikasi yang secara aktif memeriksa dan melakukan refresh token
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    console.log("[AboutLayout] Setting up token refresh checker interval");
+
+    // Jalankan pengecekan setiap 30 detik
+    const checkInterval = setInterval(async () => {
+      if (shouldRefreshToken() && !refreshing) {
+        console.log("[AboutLayout] Token needs refresh, initiating refresh");
+
+        try {
+          setRefreshing(true);
+          const result = await refreshToken();
+
+          if (result.success) {
+            console.log("[AboutLayout] Token refreshed successfully");
+            setLastRefresh(new Date());
+          } else {
+            console.error("[AboutLayout] Token refresh failed");
+          }
+        } catch (error) {
+          console.error("[AboutLayout] Token refresh error:", error);
+        } finally {
+          setRefreshing(false);
+        }
+      } else {
+        // Log status token hanya jika debug
+        if (process.env.NODE_ENV === "development" && expiresAt) {
+          const expTime = new Date(expiresAt).getTime();
+          const now = Date.now();
+          const timeLeft = Math.max(0, expTime - now);
+          console.log(
+            `[AboutLayout] Token check: ${Math.floor(
+              timeLeft / 1000
+            )}s remaining, shouldRefresh=${shouldRefreshToken()}, refreshing=${refreshing}`
+          );
+        }
+      }
+    }, 30000); // 30 seconds
+
+    return () => {
+      console.log("[AboutLayout] Cleaning up token refresh interval");
+      clearInterval(checkInterval);
+    };
+  }, [isAuthenticated, shouldRefreshToken, refreshToken, refreshing]);
 
   // Jangan tampilkan navbar pada halaman login
   const isLoginPage = location.pathname === "/login";
   if (isLoginPage) {
     return <Outlet />;
+  }
+
+  // Jika user tidak terautentikasi, redirect ke login
+  if (!isAuthenticated && !isLoginPage) {
+    const params = new URLSearchParams();
+    params.set("redirectTo", location.pathname);
+    navigate(`/login?${params.toString()}`);
+    return null;
   }
 
   return (
@@ -224,8 +311,34 @@ export default function Layout() {
         isLoading={false} // Data sudah tersedia dari loader
         isAuthenticated={isAuthenticated}
         onLogout={logout}
-        dataSource={source} // Tambahkan ini untuk debugging
+        dataSource={source} // Untuk debugging
       />
+
+      {/* Token status indicator - hanya tampilkan di development */}
+      {process.env.NODE_ENV === "development" && (
+        <div className="bg-gray-100 border-b border-gray-200 py-1">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center text-xs text-gray-500">
+              <div>
+                Auth source: <span className="font-medium">{source}</span>
+              </div>
+              {expiresAt && (
+                <div>
+                  Token expires:{" "}
+                  <span className="font-medium">
+                    {new Date(expiresAt).toLocaleTimeString()}
+                  </span>
+                  {lastRefresh && (
+                    <span className="ml-2">
+                      (Last refresh: {lastRefresh.toLocaleTimeString()})
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Konten utama */}
       <main className="flex-grow">
