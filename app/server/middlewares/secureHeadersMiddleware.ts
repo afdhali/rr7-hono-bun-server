@@ -3,51 +3,69 @@ import { secureHeaders } from "hono/secure-headers";
 import { isProduction } from "../utils/environment";
 
 export const setupSecureHeadersMiddleware = (app: Hono) => {
+  // Get APP_URL and BASE_URL
+  const APP_URL = process.env.APP_URL || "http://localhost:5173";
+  const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+
   app.use(
     "*",
     secureHeaders({
       // Strict Transport Security - memaksa HTTPS
-      // Secara default, 'true' atau 'false' atau objek config
       strictTransportSecurity: isProduction
         ? "max-age=15552000; includeSubDomains"
         : false,
+
       // CSP - mencegah XSS
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"], // Ubah sesuai kebutuhan
+
+        // Allow scripts dengan hash untuk aplikasi React
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+
+        // Perluas connectSrc untuk mengizinkan API requests
         connectSrc: [
           "'self'",
-          `${isProduction ? process.env.APP_ORIGIN : process.env.BASE_URL}`,
-        ], // Update domain sesuai kebutuhan
-        imgSrc: ["'self'", "data:"],
+          APP_URL,
+          BASE_URL,
+          // Tambahkan URLs tambahan yang mungkin dibutuhkan oleh API Anda
+          `${BASE_URL}/api/*`,
+          // Jika Anda menggunakan websockets
+          ...(BASE_URL.startsWith("https")
+            ? [`wss://${new URL(BASE_URL).host}`]
+            : [`ws://${new URL(BASE_URL).host}`]),
+        ],
+
+        // Izinkan images dari data URLs dan mungkin CDNs
+        imgSrc: ["'self'", "data:", "blob:"],
+
+        // Izinkan styles untuk aplikasi React
         styleSrc: ["'self'", "'unsafe-inline'"],
+
+        // Policies lainnya
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
         frameAncestors: ["'none'"],
+
+        // Tambahkan worker-src jika menggunakan service workers
+        workerSrc: ["'self'", "blob:"],
+
+        // Font sources
+        fontSrc: ["'self'", "data:"],
+
+        // Media sources
+        mediaSrc: ["'self'"],
       },
 
-      // X-Frame-Options - mencegah clickjacking
-      xFrameOptions: true, // 'DENY' adalah default value ketika true
-
-      // X-Content-Type-Options - mencegah MIME sniffing
-      xContentTypeOptions: true, // 'nosniff' adalah default value ketika true
-
-      // Referrer-Policy - batasi informasi referrer
-      referrerPolicy: true, // 'strict-origin-when-cross-origin' adalah default value ketika true
-
-      // X-XSS-Protection - browser XSS protection (untuk older browsers)
-      xXssProtection: true, // '1; mode=block' adalah default value ketika true
-
-      // X-Download-Options - mencegah otomatis execute download di IE
-      xDownloadOptions: true, // 'noopen' adalah default value ketika true
-
-      // X-DNS-Prefetch-Control - kontrol DNS prefetching
-      xDnsPrefetchControl: true, // 'off' adalah default value ketika true
-
-      // X-Permitted-Cross-Domain-Policies - kebijakan cross-domain untuk Flash/PDF
-      xPermittedCrossDomainPolicies: true, // 'none' adalah default value ketika true
+      // Headers lainnya sudah sesuai
+      xFrameOptions: true,
+      xContentTypeOptions: true,
+      referrerPolicy: true,
+      xXssProtection: true,
+      xDownloadOptions: true,
+      xDnsPrefetchControl: true,
+      xPermittedCrossDomainPolicies: true,
     })
   );
 };

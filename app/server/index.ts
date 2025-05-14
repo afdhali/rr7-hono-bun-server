@@ -4,7 +4,15 @@ import { createHonoServer } from "react-router-hono-server/bun";
 import { setupMiddlewares } from "./middlewares";
 import { setupApiRoutes } from "./api-routes";
 import { UserModel } from "./models/userModel";
-import type { User } from "types/server";
+import type { User2 } from "types/server";
+import type { AppVariables } from "./types";
+import type { User } from "~/db/schema";
+
+// Definisi tipe untuk objek auth
+interface AuthInfo {
+  user: Omit<User, "passwordHash"> | null;
+  isAuthenticated: boolean;
+}
 
 declare module "react-router" {
   interface AppLoadContext {
@@ -13,9 +21,16 @@ declare module "react-router" {
       environment: string;
       timestamp: string;
     };
-    getAllUser: () => Promise<User[]>;
-    getUser: (id: number) => Promise<User>;
+    getAllUser: () => Promise<User2[]>;
+    getUser: (id: number) => Promise<User2>;
+    isAuthenticated: () => Promise<boolean>;
+    getCurrentUser: () => Promise<Omit<User, "passwordHash"> | null>;
+    auth: AuthInfo;
   }
+}
+
+declare module "hono" {
+  interface ContextVariableMap extends AppVariables {}
 }
 
 // Buat instance Hono app dengan tipe yang benar
@@ -35,6 +50,16 @@ export default await createHonoServer({
   },
 
   getLoadContext(c, options) {
+    const BASE_URL =
+      process.env.BASE_URL || (c.req.url ? new URL(c.req.url).origin : "");
+    const user = c.var.user;
+    // Gunakan destructuring untuk menghilangkan passwordHash
+    const safeUser = user ? (({ passwordHash, ...rest }) => rest)(user) : null;
+    // Auth info object
+    const authInfo: AuthInfo = {
+      user: safeUser,
+      isAuthenticated: !!user,
+    };
     return {
       serverInfo: {
         version: "1.0.0",
@@ -52,6 +77,34 @@ export default await createHonoServer({
         }
         return res.json();
       },
+      isAuthenticated: async () => {
+        return !!user;
+      },
+      getCurrentUser: async () => {
+        try {
+          // Use fetch to /api/auth/me to get the current user
+          const res = await fetch(`${BASE_URL}/api/auth/me`, {
+            headers: {
+              // Forward necessary headers for auth
+              Cookie: c.req.header("Cookie") || "",
+              Origin: c.req.header("Origin") || BASE_URL,
+              "User-Agent": c.req.header("User-Agent") || "",
+            },
+          });
+
+          if (!res.ok) {
+            return null;
+          }
+
+          const data = await res.json();
+          return data.success === true ? data.user : null;
+        } catch (error) {
+          console.error("Get current user error:", error);
+          return null;
+        }
+      },
+      // Auth info - objek non-async yang sudah dihitung
+      auth: authInfo,
     };
   },
 });

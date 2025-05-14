@@ -11,6 +11,32 @@ import {
   deleteAuthCookie,
 } from "../utils/cookie";
 
+// Define schema secara terpisah
+const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(
+      /[^a-zA-Z0-9]/,
+      "Password must contain at least one special character"
+    ),
+});
+const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(
+      /[^a-zA-Z0-9]/,
+      "Password must contain at least one special character"
+    ),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+});
+
 // Helper for setting auth cookies with signed cookies - now async
 const setAuthCookies = async (
   c: Context,
@@ -52,81 +78,86 @@ const clearAuthCookies = (c: Context) => {
 
 export const setupAuthApiRoutes = (app: Hono) => {
   // Login route
-  app.post(
-    "/api/auth/login",
-    zValidator(
-      "json",
-      z.object({
-        email: z.string().email(),
-        password: z.string().min(8),
-      })
-    ),
-    async (c) => {
-      try {
-        const { email, password } = await c.req.json();
+  app.post("/api/auth/login", zValidator("json", loginSchema), async (c) => {
+    try {
+      const { email, password } = await c.req.json();
 
-        // Get metadata untuk logging dan keamanan
-        const userAgent = c.req.header("User-Agent") || "";
-        const ipAddress =
-          c.req.header("X-Forwarded-For") ||
-          c.req.header("CF-Connecting-IP") ||
-          c.req.header("X-Real-IP") ||
-          "0.0.0.0";
+      // Get metadata untuk logging dan keamanan
+      const userAgent = c.req.header("User-Agent") || "";
+      const ipAddress =
+        c.req.header("X-Forwarded-For") ||
+        c.req.header("CF-Connecting-IP") ||
+        c.req.header("X-Real-IP") ||
+        "0.0.0.0";
 
-        // Determine browser/device family via user agent
-        const family = userAgent.includes("Chrome")
-          ? "Chrome"
-          : userAgent.includes("Firefox")
-          ? "Firefox"
-          : userAgent.includes("Safari")
-          ? "Safari"
-          : userAgent.includes("Edge")
-          ? "Edge"
-          : "Other";
+      // Determine browser/device family via user agent
+      const family = userAgent.includes("Chrome")
+        ? "Chrome"
+        : userAgent.includes("Firefox")
+        ? "Firefox"
+        : userAgent.includes("Safari")
+        ? "Safari"
+        : userAgent.includes("Edge")
+        ? "Edge"
+        : "Other";
 
-        const {
-          user,
-          accessToken,
-          refreshToken,
-          accessTokenExpiresIn,
-          refreshTokenExpiresIn,
-        } = await AuthService.login(email, password, {
-          userAgent,
-          ipAddress,
-          family,
-        });
+      const {
+        user,
+        accessToken,
+        refreshToken,
+        accessTokenExpiresIn,
+        refreshTokenExpiresIn,
+      } = await AuthService.login(email, password, {
+        userAgent,
+        ipAddress,
+        family,
+      });
 
-        // Set signed cookies with JWT tokens
-        await setAuthCookies(c, {
-          accessToken,
-          refreshToken,
-          accessTokenExpiresIn,
-          refreshTokenExpiresIn,
-        });
+      // Set signed cookies with JWT tokens
+      await setAuthCookies(c, {
+        accessToken,
+        refreshToken,
+        accessTokenExpiresIn,
+        refreshTokenExpiresIn,
+      });
 
-        // Security headers for auth responses
-        c.header("Cache-Control", "no-store, max-age=0");
-        c.header("Pragma", "no-cache");
+      // Security headers for auth responses
+      c.header("Cache-Control", "no-store, max-age=0");
+      c.header("Pragma", "no-cache");
 
-        // Return user tanpa password hash
-        const { passwordHash, ...userWithoutPassword } = user;
+      // Return user tanpa password hash
+      const { passwordHash, ...userWithoutPassword } = user;
 
-        return c.json({
-          success: true,
-          user: userWithoutPassword,
-          expiresAt: new Date(accessTokenExpiresIn).toISOString(),
-        });
-      } catch (error) {
+      return c.json({
+        success: true,
+        user: userWithoutPassword,
+        expiresAt: new Date(accessTokenExpiresIn).toISOString(),
+      });
+    } catch (error) {
+      // Check if it's a ZodError (from zValidator)
+      if (error instanceof z.ZodError) {
+        // Generik error untuk production
         return c.json(
           {
             success: false,
-            message: error instanceof Error ? error.message : "Login failed",
+            message: "Email or Password is Invalid",
+            // Hanya include details di development
+            ...(process.env.NODE_ENV === "development" && {
+              details: error.format(),
+            }),
           },
           401
         );
       }
+      return c.json(
+        {
+          success: false,
+          message: error instanceof Error ? error.message : "Login failed",
+        },
+        401
+      );
     }
-  );
+  });
 
   // Refresh token endpoint
   app.post("/api/auth/refresh", async (c) => {
@@ -184,15 +215,7 @@ export const setupAuthApiRoutes = (app: Hono) => {
   // Register route
   app.post(
     "/api/auth/register",
-    zValidator(
-      "json",
-      z.object({
-        email: z.string().email(),
-        password: z.string().min(8),
-        firstName: z.string().optional(),
-        lastName: z.string().optional(),
-      })
-    ),
+    zValidator("json", registerSchema),
     async (c) => {
       try {
         const userData = await c.req.json();
@@ -214,6 +237,14 @@ export const setupAuthApiRoutes = (app: Hono) => {
           201
         );
       } catch (error) {
+        if (error instanceof z.ZodError) {
+          return c.json({
+            success: false,
+            message: {
+              details: error.format(),
+            },
+          });
+        }
         return c.json(
           {
             success: false,

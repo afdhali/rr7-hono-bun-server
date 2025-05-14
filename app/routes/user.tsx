@@ -1,5 +1,4 @@
 import { useLoaderData, useParams } from "react-router";
-import type { Route } from "./+types/user";
 import { useGetUserByIdQuery } from "~/store/api";
 
 // export async function loader({ params, context }: Route.LoaderArgs) {

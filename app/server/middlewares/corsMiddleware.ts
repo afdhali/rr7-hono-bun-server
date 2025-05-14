@@ -14,8 +14,8 @@ export const setupCorsMiddleware = (app: Hono) => {
         "https://rr7honobun.emeshdev.com",
       ],
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-      allowHeaders: ["Content-Type", "Authorization"],
-      exposeHeaders: ["Content-Length"],
+      allowHeaders: ["Content-Type", "Authorization", "Origin"],
+      exposeHeaders: ["Content-Length", "Set-Cookie"],
       credentials: true,
     })
   );
