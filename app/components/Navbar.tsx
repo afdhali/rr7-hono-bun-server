@@ -7,7 +7,7 @@ type NavbarProps = {
   isLoading: boolean;
   isAuthenticated: boolean;
   onLogout: () => void;
-  dataSource?: "server" | "client" | "api";
+  dataSource?: "server" | "client" | "api" | "layout";
 };
 
 export default function Navbar({
