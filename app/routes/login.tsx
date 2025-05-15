@@ -47,6 +47,24 @@ type ActionData = {
   redirectTo: string;
 };
 
+// Loader untuk redirect jika sudah login
+export async function loader({ request, context }: Route.LoaderArgs) {
+  try {
+    const isAuthenticated = await context.isAuthenticated();
+    if (isAuthenticated) {
+      console.log(
+        "[Login Loader] User already authenticated, redirecting to about page"
+      );
+      return redirect("/about");
+    }
+    // if not authenticated
+    return null;
+  } catch (error) {
+    console.error("[Login Loader] Error checking authentication:", error);
+    return null;
+  }
+}
+
 // Server Action for login
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();

@@ -39,7 +39,7 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
         imgSrc: ["'self'", "data:", "blob:"],
 
         // Izinkan styles untuk aplikasi React
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
 
         // Policies lainnya
         frameSrc: ["'none'"],
@@ -52,7 +52,7 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
         workerSrc: ["'self'", "blob:"],
 
         // Font sources
-        fontSrc: ["'self'", "data:"],
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
 
         // Media sources
         mediaSrc: ["'self'"],
