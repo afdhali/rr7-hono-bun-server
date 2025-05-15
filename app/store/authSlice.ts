@@ -1,4 +1,4 @@
-// app/store/authSlice.ts
+//  app/store/authSlice.ts
 import { createAction, createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import type { User } from "~/db/schema";
@@ -16,6 +16,9 @@ export interface AuthState {
   isLoading: boolean;
   source: "server" | "client" | null;
   logoutInProgress: boolean; // Ini harus ada
+  refreshInProgress: boolean; // Tambahkan flag untuk refresh
+  lastRefreshAttempt: string | null; // Tambahkan tracking waktu refresh terakhir
+  lastSuccessfulRefresh: string | null; // Tambahkan tracking refresh sukses terakhir
 }
 
 const initialState: AuthState = {
@@ -24,7 +27,22 @@ const initialState: AuthState = {
   isLoading: false,
   source: null,
   logoutInProgress: false, // Default value
+  refreshInProgress: false, // Default value
+  lastRefreshAttempt: null, // Default value
+  lastSuccessfulRefresh: null, // Default value
 };
+
+// Create action untuk mengubah refresh status
+export const setRefreshInProgress = createAction<boolean>(
+  "auth/setRefreshInProgress"
+);
+
+// Create action untuk mengubah refresh tracking
+export const trackRefreshAttempt = createAction("auth/trackRefreshAttempt");
+
+export const trackSuccessfulRefresh = createAction(
+  "auth/trackSuccessfulRefresh"
+);
 
 export const authSlice = createSlice({
   name: "auth",
@@ -43,6 +61,9 @@ export const authSlice = createSlice({
         state.user = action.payload.user;
         state.expiresAt = action.payload.expiresAt;
         state.source = action.payload.source || "client";
+
+        // Update last successful refresh
+        state.lastSuccessfulRefresh = new Date().toISOString();
       }
     },
     clearCredentials: (state) => {
@@ -53,6 +74,7 @@ export const authSlice = createSlice({
       state.expiresAt = null;
       state.isLoading = false;
       state.source = null;
+      state.refreshInProgress = false;
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;
@@ -79,7 +101,21 @@ export const authSlice = createSlice({
       state.logoutInProgress = action.payload;
     });
 
-    // Original matchers unchanged
+    // Handle the setRefreshInProgress action
+    builder.addCase(setRefreshInProgress, (state, action) => {
+      state.refreshInProgress = action.payload;
+    });
+
+    // Handle refresh tracking
+    builder.addCase(trackRefreshAttempt, (state) => {
+      state.lastRefreshAttempt = new Date().toISOString();
+    });
+
+    builder.addCase(trackSuccessfulRefresh, (state) => {
+      state.lastSuccessfulRefresh = new Date().toISOString();
+    });
+
+    // Match for ME query
     builder.addMatcher(
       authApi.endpoints.me.matchFulfilled,
       (state, { payload }) => {
@@ -97,18 +133,39 @@ export const authSlice = createSlice({
         state.isLoading = false;
       }
     );
+
     builder.addMatcher(authApi.endpoints.me.matchRejected, (state) => {
       state.isLoading = false;
     });
+
+    // Match for Refresh
+    builder.addMatcher(authApi.endpoints.refresh.matchPending, (state) => {
+      state.isLoading = true;
+      state.refreshInProgress = true;
+      state.lastRefreshAttempt = new Date().toISOString();
+    });
+
     builder.addMatcher(
       authApi.endpoints.refresh.matchFulfilled,
       (state, { payload }) => {
         if (!state.logoutInProgress && payload.success) {
           state.expiresAt = payload.expiresAt;
+          state.lastSuccessfulRefresh = new Date().toISOString();
         }
         state.isLoading = false;
+        state.refreshInProgress = false;
       }
     );
+
+    builder.addMatcher(authApi.endpoints.refresh.matchRejected, (state) => {
+      state.isLoading = false;
+      state.refreshInProgress = false;
+
+      // Note: We don't clear auth here as that would be handled
+      // in the refresh's onQueryStarted callback if needed
+    });
+
+    // Match for Logout
     builder.addMatcher(authApi.endpoints.logout.matchFulfilled, (state) => {
       // Set logout in progress flag
       state.logoutInProgress = true;
@@ -116,13 +173,17 @@ export const authSlice = createSlice({
       state.expiresAt = null;
       state.isLoading = false;
       state.source = null;
+      state.refreshInProgress = false;
     });
+
     // Add loading state handlers
     builder.addMatcher(authApi.endpoints.me.matchPending, (state) => {
       state.isLoading = true;
     });
-    builder.addMatcher(authApi.endpoints.refresh.matchPending, (state) => {
+
+    builder.addMatcher(authApi.endpoints.logout.matchPending, (state) => {
       state.isLoading = true;
+      state.logoutInProgress = true;
     });
   },
 });
@@ -142,5 +203,11 @@ export const selectAuthSource = (state: any) =>
   state.auth?.source as "server" | "client" | null;
 export const selectLogoutInProgress = (state: any) =>
   !!state.auth?.logoutInProgress;
+export const selectRefreshInProgress = (state: any) =>
+  !!state.auth?.refreshInProgress;
+export const selectLastRefreshAttempt = (state: any) =>
+  state.auth?.lastRefreshAttempt as string | null;
+export const selectLastSuccessfulRefresh = (state: any) =>
+  state.auth?.lastSuccessfulRefresh as string | null;
 
 export default authSlice.reducer;

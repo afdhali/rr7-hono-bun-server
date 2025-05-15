@@ -1,5 +1,5 @@
 // routes/about/layout.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Outlet,
   useLocation,
@@ -212,122 +212,49 @@ export function HydrateFallback() {
 }
 
 export default function Layout() {
-  const { isLoggingOut } = useAuth();
+  const {
+    user,
+    isLoggingOut,
+    isAuthenticated,
+    logout,
+    expiresAt,
+    refreshStatus,
+  } = useAuth();
+
   const location = useLocation();
   const navigate = useNavigate();
 
   // Get data from loader using useLoaderData
   const loaderData = useLoaderData<LayoutLoaderData>();
-  // PERBAIKAN: Tangani loaderData null dengan lebih baik
-  const user = loaderData?.user;
-  const isAuthenticated = !!loaderData?.isAuthenticated;
-  const source = loaderData?.source;
-  const loaderExpiresAt = loaderData?.expiresAt;
+  // Handle null loaderData with fallback values
+  const source = loaderData?.source || "unknown";
 
-  // Status for token refresh
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Use the auth hook for client-side functions
-  const { logout, refreshToken, expiresAt } = useAuth({ autoFetch: false });
-
-  // Function to determine if token needs refresh
-  const shouldRefreshToken = useCallback(() => {
-    if (!expiresAt) return false;
-
-    const expirationTime = new Date(expiresAt).getTime();
-    const now = Date.now();
-    const timeUntilExpiry = expirationTime - now;
-
-    // Refresh if expiration time is less than 3 minutes
-    const refreshThreshold = 3 * 60 * 1000; // 3 minutes
-
-    // Add rate limiting - don't refresh if done recently (1 minute)
-    const rateLimitThreshold = 60 * 1000; // 1 minute
-    const canRefreshAgain =
-      !lastRefresh || now - lastRefresh.getTime() > rateLimitThreshold;
-
-    return (
-      timeUntilExpiry > 0 &&
-      timeUntilExpiry < refreshThreshold &&
-      canRefreshAgain
-    );
-  }, [expiresAt, lastRefresh]);
-
-  // Run interval to check token expiry
+  // Guard pattern in layout
   useEffect(() => {
-    if (!isAuthenticated) return;
-
-    console.log("[AboutLayout] Setting up token refresh checker interval");
-
-    // Check every 30 seconds
-    const checkInterval = setInterval(async () => {
-      if (shouldRefreshToken() && !refreshing) {
-        console.log("[AboutLayout] Token needs refresh, initiating refresh");
-
-        try {
-          setRefreshing(true);
-          const result = await refreshToken();
-
-          if (result?.success) {
-            console.log("[AboutLayout] Token refreshed successfully");
-            setLastRefresh(new Date());
-          } else {
-            console.error("[AboutLayout] Token refresh failed");
-          }
-        } catch (error) {
-          console.error("[AboutLayout] Token refresh error:", error);
-        } finally {
-          setRefreshing(false);
-        }
-      } else if (process.env.NODE_ENV === "development" && expiresAt) {
-        // Log token status only in development
-        const expTime = new Date(expiresAt).getTime();
-        const now = Date.now();
-        const timeLeft = Math.max(0, expTime - now);
-        console.log(
-          `[AboutLayout] Token check: ${Math.floor(
-            timeLeft / 1000
-          )}s remaining, shouldRefresh=${shouldRefreshToken()}, refreshing=${refreshing}`
-        );
-      }
-    }, 30000); // 30 seconds
-
-    return () => {
-      console.log("[AboutLayout] Cleaning up token refresh interval");
-      clearInterval(checkInterval);
-    };
-  }, [isAuthenticated, shouldRefreshToken, refreshToken, refreshing]);
-
-  // Guard pattern di level layout
-  // PERBAIKAN: Jadikan guard pattern lebih defensif
-  useEffect(() => {
-    // Jangan navigasi jika data belum dimuat atau sedang proses logout
+    // Don't navigate if in logout process or on login page
     if (isLoggingOut || location.pathname === "/login") {
-      return; // Skip navigasi jika sedang logout atau sudah di login page
+      return;
     }
 
-    // Jika ada data loader dan tidak authenticated, navigasi ke login
+    // If loader data is available but not authenticated, go to login
     if (loaderData && !loaderData.isAuthenticated) {
       const params = new URLSearchParams();
       params.set("redirectTo", location.pathname);
       navigate(`/login?${params.toString()}`, { replace: true });
       return;
     }
-
-    // Jika tidak ada data loader sama sekali, tunggu data loader dimuat
-    // Jangan navigasi jika tidak ada data loader
   }, [loaderData, isLoggingOut, location.pathname, navigate]);
 
-  // PERBAIKAN: Perbaiki conditional rendering untuk menghindari flash
+  // Render loading state while logging out
   if (isLoggingOut) {
     return <div className="p-8 text-center">Logging out...</div>;
   }
 
-  // PERBAIKAN: Jangan redirect di sini, biarkan useEffect yang menangani
+  // Render loading state if no loader data or user
   if (!loaderData || !user) {
     return <div className="p-8 text-center">Loading...</div>;
   }
+
   // Don't show navbar on login page
   const isLoginPage = location.pathname === "/login";
   if (isLoginPage) {
@@ -359,9 +286,10 @@ export default function Layout() {
                   <span className="font-medium">
                     {new Date(expiresAt).toLocaleTimeString()}
                   </span>
-                  {lastRefresh && (
+                  {refreshStatus.lastSuccess && (
                     <span className="ml-2">
-                      (Last refresh: {lastRefresh.toLocaleTimeString()})
+                      (Last refresh:{" "}
+                      {refreshStatus.lastSuccess.toLocaleTimeString()})
                     </span>
                   )}
                 </div>

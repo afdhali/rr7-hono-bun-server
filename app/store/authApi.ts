@@ -103,7 +103,10 @@ export const authApi = createApi({
       { success: boolean; user: Omit<User, "passwordHash"> },
       void
     >({
-      query: () => "/me",
+      query: () => ({
+        url: "/me",
+        credentials: "include", // Pastikan cookies disertakan
+      }),
       providesTags: ["Auth"],
       // Use transformResponse to handle both successful and failed responses
       transformResponse: (response: any, meta, arg) => {
@@ -188,6 +191,7 @@ export const authApi = createApi({
       query: () => ({
         url: "/logout-all",
         method: "POST",
+        credentials: "include", // Pastikan cookies disertakan
       }),
       invalidatesTags: ["Auth"],
       // Add onQueryStarted for side effects
@@ -221,32 +225,71 @@ export const authApi = createApi({
       query: () => ({
         url: "/refresh",
         method: "POST",
+        credentials: "include", // Pastikan cookies disertakan
       }),
       invalidatesTags: ["Auth"],
       transformResponse: (response: RefreshResponse, meta) => {
         console.log("Refresh token response:", response);
         return response;
       },
+      // Improved error handling
+      transformErrorResponse: (
+        response: FetchBaseQueryError | { status: number }
+      ) => {
+        console.error("Refresh token error response:", response);
+        // If it's a 401, we need to clear credentials
+        if ("status" in response && response.status === 401) {
+          console.warn("Refresh token unauthorized (401), session expired");
+        }
+        return response;
+      },
       async onQueryStarted(_, { dispatch, queryFulfilled, getState }) {
+        const state = getState();
+
+        // Skip update if logout in progress
+        if (isLogoutInProgress(state)) {
+          console.log("Refresh started but logout in progress, skipping");
+          return;
+        }
+
         try {
           const { data } = await queryFulfilled;
           console.log("Refresh token fulfilled:", data);
 
+          // Double check we're not in logout process
+          if (isLogoutInProgress(getState())) {
+            console.log(
+              "Refresh succeeded but logout now in progress, skipping update"
+            );
+            return;
+          }
+
           // Dapatkan user dari state saat ini
-          const state = getState() as any;
-          const user = state.auth.user;
+          const user = getCurrentUser(getState());
 
           // Update Redux store jika berhasil dan ada user
           if (data.success && user) {
+            console.log(
+              "Updating Redux store with new token expiry:",
+              data.expiresAt
+            );
             dispatch(
               setCredentials({
                 user,
                 expiresAt: data.expiresAt,
               })
             );
+          } else if (data.success && !user) {
+            console.warn("Refresh succeeded but no user in state");
           }
         } catch (error) {
-          console.error("Refresh token error:", error);
+          console.error("Refresh token error in onQueryStarted:", error);
+
+          // Check if this is a 401 unauthorized
+          if (error) {
+            console.log("401 Unauthorized in refresh, clearing credentials");
+            dispatch(clearCredentials());
+          }
         }
       },
     }),
@@ -254,6 +297,7 @@ export const authApi = createApi({
 });
 
 export const { useMeQuery, useLogoutMutation, useRefreshMutation } = authApi;
+
 // Export utility function untuk memeriksa keberadaan auth cookie
 export function hasAuthCookie() {
   return (
