@@ -1,5 +1,5 @@
 // hooks/useAuth.ts
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useDispatch, useSelector } from "react-redux";
 import { useRouteLoaderData, useRevalidator } from "react-router";
@@ -18,6 +18,8 @@ import {
   clearCredentials,
   setCredentials,
   syncServerAuth,
+  selectLogoutInProgress,
+  setLogoutInProgress,
 } from "~/store/authSlice";
 
 export function useAuth(options = { autoFetch: true }) {
@@ -25,8 +27,15 @@ export function useAuth(options = { autoFetch: true }) {
   const dispatch = useDispatch();
   const revalidator = useRevalidator();
 
+  // Gunakan state lokal untuk tracking proses logout
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // Tambahkan state untuk menandai bahwa kita sedang dalam proses redirect
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  // Use a ref to track if a redirect is in progress
+  const redirectInProgressRef = useRef(false);
+
   // Get server auth data from root loader if available
-  const rootData = useRouteLoaderData("root");
+  const rootData = useRouteLoaderData("aboutLayout");
   const serverAuth = rootData?.auth;
 
   // Redux selectors
@@ -35,6 +44,7 @@ export function useAuth(options = { autoFetch: true }) {
   const expiresAt = useSelector(selectExpiresAt);
   const isLoading = useSelector(selectIsLoading);
   const authSource = useSelector(selectAuthSource);
+  const logoutInProgress = useSelector(selectLogoutInProgress);
 
   // RTK Query hooks
   const {
@@ -43,7 +53,14 @@ export function useAuth(options = { autoFetch: true }) {
     refetch: refetchMe,
   } = useMeQuery(undefined, {
     // Skip if we already have auth data or not autoFetch
-    skip: !options.autoFetch || isAuthenticated || !hasAuthCookie(),
+    skip:
+      !options.autoFetch ||
+      isAuthenticated ||
+      !hasAuthCookie() ||
+      isLoggingOut ||
+      isRedirecting ||
+      logoutInProgress ||
+      redirectInProgressRef.current,
   });
 
   const [refresh, refreshResult] = useRefreshMutation();
@@ -63,7 +80,23 @@ export function useAuth(options = { autoFetch: true }) {
   }, [expiresAt]);
 
   useEffect(() => {
+    // Skip effect jika dalam proses logout atau redirect
+    if (
+      isLoggingOut ||
+      isRedirecting ||
+      logoutInProgress ||
+      redirectInProgressRef.current
+    )
+      return;
     const checkAuthCookie = () => {
+      // Skip check if we're in the process of handling auth changes
+      if (
+        isLoggingOut ||
+        isRedirecting ||
+        logoutInProgress ||
+        redirectInProgressRef.current
+      )
+        return;
       const hasAuthCookieNow = hasAuthCookie();
       console.log(`Auth cookie check: ${hasAuthCookieNow}`);
 
@@ -72,9 +105,21 @@ export function useAuth(options = { autoFetch: true }) {
         console.log(
           "Auth cookie exists but no user in state, fetching user data"
         );
-        refetchMe().catch((err) =>
-          console.error("Error fetching user data:", err)
-        );
+
+        // PERBAIKAN: Gunakan setTimeout untuk menghindari dispatch bersarang
+        setTimeout(() => {
+          // Double-check we're still not in logout or redirect process
+          if (
+            !isLoggingOut &&
+            !isRedirecting &&
+            !logoutInProgress &&
+            !redirectInProgressRef.current
+          ) {
+            refetchMe().catch((err) => {
+              console.error("Error fetching user data:", err);
+            });
+          }
+        }, 0);
       }
 
       // If auth cookie is gone but we still have user data, clear it
@@ -82,7 +127,11 @@ export function useAuth(options = { autoFetch: true }) {
         console.log(
           "Auth cookie gone but user still in state, clearing credentials"
         );
-        dispatch(clearCredentials());
+
+        // PERBAIKAN: Gunakan setTimeout untuk menghindari dispatch bersarang
+        setTimeout(() => {
+          dispatch(clearCredentials());
+        }, 0);
       }
     };
 
@@ -93,11 +142,27 @@ export function useAuth(options = { autoFetch: true }) {
     const interval = setInterval(checkAuthCookie, 5000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated, isLoading, meLoading, refetchMe, dispatch]);
+  }, [
+    isAuthenticated,
+    isLoading,
+    meLoading,
+    refetchMe,
+    dispatch,
+    isLoggingOut,
+    isRedirecting,
+    logoutInProgress,
+  ]);
 
   // Sync server data to Redux store on initial load
   useEffect(() => {
-    if (serverAuth?.user && (!user || authSource !== "server")) {
+    if (
+      serverAuth?.user &&
+      (!user || authSource !== "server") &&
+      !isLoggingOut &&
+      !isRedirecting &&
+      !logoutInProgress &&
+      !redirectInProgressRef.current
+    ) {
       console.log("Syncing server auth data to Redux store");
       dispatch(
         syncServerAuth({
@@ -106,7 +171,15 @@ export function useAuth(options = { autoFetch: true }) {
         })
       );
     }
-  }, [serverAuth, user, authSource, dispatch]);
+  }, [
+    serverAuth,
+    user,
+    authSource,
+    dispatch,
+    isLoggingOut,
+    isRedirecting,
+    logoutInProgress,
+  ]);
 
   // Auto-fetch from client API if we have auth cookie but no user
   useEffect(() => {
@@ -125,18 +198,46 @@ export function useAuth(options = { autoFetch: true }) {
   }, [options.autoFetch, isAuthenticated, isLoading, meLoading, refetchMe]);
 
   // Use interval approach for more reliable token refresh
+  // Token refresh effect
   useEffect(() => {
-    if (!isAuthenticated || !expiresAt) return;
+    // Skip if not authenticated or in logout/redirect process
+    if (
+      !isAuthenticated ||
+      !expiresAt ||
+      isLoggingOut ||
+      isRedirecting ||
+      logoutInProgress ||
+      redirectInProgressRef.current
+    )
+      return;
 
     console.log("[useAuth] Setting up token refresh checker interval");
 
-    // Periksa setiap 30 detik apakah token perlu di-refresh
+    // Check token expiry every 30 seconds
     const checkInterval = setInterval(() => {
+      // Skip if we're now in logout/redirect process
+      if (
+        isLoggingOut ||
+        isRedirecting ||
+        logoutInProgress ||
+        redirectInProgressRef.current
+      )
+        return;
+
       if (shouldRefreshToken()) {
         console.log("[useAuth] Token needs refresh, initiating refresh");
         refresh()
           .unwrap()
           .then((result) => {
+            // Skip if we entered logout mode during the refresh
+            if (
+              isLoggingOut ||
+              isRedirecting ||
+              logoutInProgress ||
+              redirectInProgressRef.current
+            )
+              return;
+
             if (result.success) {
               console.log(
                 "[useAuth] Auto-refresh successful, new expiry:",
@@ -156,16 +257,19 @@ export function useAuth(options = { autoFetch: true }) {
           .catch((err) => {
             console.error("[useAuth] Auto-refresh error:", err);
           });
-      } else {
-        if (expiresAt) {
-          const expTime = new Date(expiresAt).getTime();
-          const timeLeft = Math.max(0, expTime - Date.now());
-          console.log(
-            `[useAuth] Token still valid, ${Math.floor(
-              timeLeft / 1000
-            )}s remaining`
-          );
-        }
+      } else if (
+        expiresAt &&
+        !isLoggingOut &&
+        !isRedirecting &&
+        !logoutInProgress
+      ) {
+        const expTime = new Date(expiresAt).getTime();
+        const timeLeft = Math.max(0, expTime - Date.now());
+        console.log(
+          `[useAuth] Token still valid, ${Math.floor(
+            timeLeft / 1000
+          )}s remaining`
+        );
       }
     }, 30000); // Check every 30 seconds
 
@@ -181,6 +285,9 @@ export function useAuth(options = { autoFetch: true }) {
     user,
     dispatch,
     revalidator,
+    isLoggingOut,
+    isRedirecting,
+    logoutInProgress,
   ]);
 
   // Tetap pertahankan implementation lama sebagai fallback
@@ -260,37 +367,97 @@ export function useAuth(options = { autoFetch: true }) {
     }
   }, [isAuthenticated, expiresAt, setupTokenRefresh]);
 
-  // Logout handler
-  const handleLogout = useCallback(
-    async (redirectTo = "/login") => {
+  // Modifikasi hook untuk skip effect saat logout
+  useEffect(() => {
+    // Skip jika sedang proses logout
+    if (isLoggingOut) return;
+
+    // Jika tidak authenticated, juga skip
+    if (!isAuthenticated || !expiresAt) return;
+
+    // ... rest of the token refresh logic
+  }, [isAuthenticated, expiresAt, isLoggingOut]);
+
+  // COMPLETELY REVISED logout handler
+  const handleLogout = useCallback(async () => {
+    try {
+      console.log("Starting logout process");
+
+      // Set all flags to prevent any further auth operations
+      redirectInProgressRef.current = true;
+      setIsLoggingOut(true);
+      setIsRedirecting(true);
+      dispatch(setLogoutInProgress(true));
+
+      // 1. Clear Redux state first
+      console.log("1. Clearing Redux state");
+      dispatch(clearCredentials());
+
+      // 2. Call logout API
+      console.log("2. Calling logout API");
       try {
         await logout().unwrap();
-        dispatch(clearCredentials());
-
-        // Ensure cookies are cleared by revalidating
-        revalidator.revalidate();
-
-        navigate(redirectTo);
-      } catch (error) {
-        console.error("Logout error:", error);
-        dispatch(clearCredentials());
-        navigate(redirectTo);
+        console.log("Logout API called successfully");
+      } catch (logoutError) {
+        console.error("Logout API error:", logoutError);
+        // Continue with redirect even if API fails
       }
-    },
-    [logout, dispatch, navigate, revalidator]
-  );
 
-  // Force sync - useful for ensuring client and server are in sync
+      // 3. Final redirect with small delay to allow state updates
+      console.log("3. Preparing to redirect to login page");
+      setTimeout(() => {
+        // 4. Final redirect
+        console.log("4. Redirecting to login page");
+        window.location.href = "/login";
+      }, 100);
+    } catch (error) {
+      console.error("Unexpected error during logout:", error);
+      // Ensure we still redirect in case of error
+      window.location.href = "/login";
+    }
+  }, [dispatch, logout]);
+
+  // Simplified sync function
   const syncAuth = useCallback(() => {
-    refetchMe();
-    revalidator.revalidate();
-  }, [refetchMe, revalidator]);
+    if (
+      !isLoggingOut &&
+      !isRedirecting &&
+      !logoutInProgress &&
+      !redirectInProgressRef.current
+    ) {
+      refetchMe().catch((err) => console.error("Error in syncAuth:", err));
+      revalidator.revalidate();
+    }
+  }, [refetchMe, revalidator, isLoggingOut, isRedirecting, logoutInProgress]);
 
-  // Force refresh - untuk manual refresh token jika diperlukan
+  // Manual token refresh with improved error handling
   const manualRefreshToken = useCallback(async () => {
+    // Skip if in logout/redirect process
+    if (
+      isLoggingOut ||
+      isRedirecting ||
+      logoutInProgress ||
+      redirectInProgressRef.current
+    ) {
+      return { success: false, reason: "Auth operation in progress" };
+    }
+
     try {
       console.log("[useAuth] Manual refresh token requested");
       const result = await refresh().unwrap();
+
+      // Double check we're not in logout process
+      if (
+        isLoggingOut ||
+        isRedirecting ||
+        logoutInProgress ||
+        redirectInProgressRef.current
+      ) {
+        return {
+          success: false,
+          reason: "Auth operation began during refresh",
+        };
+      }
 
       if (result.success) {
         console.log(
@@ -313,7 +480,15 @@ export function useAuth(options = { autoFetch: true }) {
       console.error("[useAuth] Manual refresh error:", error);
       return { success: false, error };
     }
-  }, [refresh, dispatch, user, revalidator]);
+  }, [
+    refresh,
+    dispatch,
+    user,
+    revalidator,
+    isLoggingOut,
+    isRedirecting,
+    logoutInProgress,
+  ]);
 
   return {
     user,
@@ -329,5 +504,7 @@ export function useAuth(options = { autoFetch: true }) {
     refreshToken: manualRefreshToken, // Export manual refresh function
     authSource, // Include source info for debugging
     expiresAt, // Export expiry time
+    isLoggingOut: isLoggingOut || logoutInProgress,
+    isRedirecting,
   };
 }

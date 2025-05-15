@@ -78,12 +78,12 @@ export async function clientLoader({
     let serverData: LayoutLoaderData | null = null;
     try {
       serverData = (await serverLoader()) as LayoutLoaderData;
-      console.log(
-        "[AboutLayout ClientLoader] Got server data:",
-        serverData?.user?.email
-      );
 
       if (serverData?.user) {
+        console.log(
+          "[AboutLayout ClientLoader] Got server data:",
+          serverData?.user?.email
+        );
         // Sync to Redux store
         store.dispatch(
           syncServerAuth({
@@ -95,8 +95,7 @@ export async function clientLoader({
       }
     } catch (error) {
       console.log(
-        "[AboutLayout ClientLoader] Server loader failed or redirected:",
-        error
+        "[AboutLayout ClientLoader] Server loader failed or redirected:"
       );
     }
 
@@ -150,7 +149,7 @@ export async function clientLoader({
           };
         }
       } catch (error) {
-        console.error("[AboutLayout ClientLoader] API fetch error:", error);
+        console.error("[AboutLayout ClientLoader] API fetch error");
       }
     }
 
@@ -213,17 +212,17 @@ export function HydrateFallback() {
 }
 
 export default function Layout() {
+  const { isLoggingOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   // Get data from loader using useLoaderData
   const loaderData = useLoaderData<LayoutLoaderData>();
-  const {
-    user,
-    isAuthenticated,
-    expiresAt: loaderExpiresAt,
-    source,
-  } = loaderData || {};
+  // PERBAIKAN: Tangani loaderData null dengan lebih baik
+  const user = loaderData?.user;
+  const isAuthenticated = !!loaderData?.isAuthenticated;
+  const source = loaderData?.source;
+  const loaderExpiresAt = loaderData?.expiresAt;
 
   // Status for token refresh
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -300,6 +299,35 @@ export default function Layout() {
     };
   }, [isAuthenticated, shouldRefreshToken, refreshToken, refreshing]);
 
+  // Guard pattern di level layout
+  // PERBAIKAN: Jadikan guard pattern lebih defensif
+  useEffect(() => {
+    // Jangan navigasi jika data belum dimuat atau sedang proses logout
+    if (isLoggingOut || location.pathname === "/login") {
+      return; // Skip navigasi jika sedang logout atau sudah di login page
+    }
+
+    // Jika ada data loader dan tidak authenticated, navigasi ke login
+    if (loaderData && !loaderData.isAuthenticated) {
+      const params = new URLSearchParams();
+      params.set("redirectTo", location.pathname);
+      navigate(`/login?${params.toString()}`, { replace: true });
+      return;
+    }
+
+    // Jika tidak ada data loader sama sekali, tunggu data loader dimuat
+    // Jangan navigasi jika tidak ada data loader
+  }, [loaderData, isLoggingOut, location.pathname, navigate]);
+
+  // PERBAIKAN: Perbaiki conditional rendering untuk menghindari flash
+  if (isLoggingOut) {
+    return <div className="p-8 text-center">Logging out...</div>;
+  }
+
+  // PERBAIKAN: Jangan redirect di sini, biarkan useEffect yang menangani
+  if (!loaderData || !user) {
+    return <div className="p-8 text-center">Loading...</div>;
+  }
   // Don't show navbar on login page
   const isLoginPage = location.pathname === "/login";
   if (isLoginPage) {

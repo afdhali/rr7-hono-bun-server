@@ -1,4 +1,3 @@
-// app/store/index.ts
 import {
   configureStore,
   createListenerMiddleware,
@@ -19,11 +18,26 @@ const rootReducer = combineReducers({
   auth: authReducer,
 });
 
-// Definisikan tipe RootState berdasarkan rootReducer
-export type RootState = ReturnType<typeof rootReducer>;
+// Buat store terlebih dahulu, kemudian definisikan tipe RootState
+export const store = configureStore({
+  reducer: rootReducer,
+  middleware: (getDefaultMiddleware) => {
+    return getDefaultMiddleware()
+      .concat(api.middleware)
+      .concat(authApi.middleware)
+      .concat(listenerMiddleware.middleware);
+  },
+  preloadedState: loadState(),
+});
+
+// Definisikan RootState berdasarkan store yang sudah dibuat
+// Ini akan menghasilkan tipe yang spesifik untuk state saat ini
+export type RootState = ReturnType<typeof store.getState>;
+
+// === Helper Functions ===
 
 // Coba muat state dari sessionStorage
-const loadState = () => {
+function loadState() {
   try {
     if (typeof window === "undefined") return undefined;
 
@@ -37,7 +51,13 @@ const loadState = () => {
       console.log("Auth state found but no auth cookie, clearing auth state");
       return {
         ...parsedState,
-        auth: { user: null, expiresAt: null, isLoading: false, source: null },
+        auth: {
+          user: null,
+          expiresAt: null,
+          isLoading: false,
+          source: null,
+          logoutInProgress: false,
+        },
       };
     }
 
@@ -46,7 +66,7 @@ const loadState = () => {
     console.warn("Failed to load state from sessionStorage:", e);
     return undefined;
   }
-};
+}
 
 // Fungsi untuk menyimpan state
 const saveState = (state: RootState) => {
@@ -61,18 +81,6 @@ const saveState = (state: RootState) => {
     console.warn("Failed to save state to sessionStorage:", e);
   }
 };
-
-// Buat store dengan preloaded state dari sessionStorage
-export const store = configureStore({
-  reducer: rootReducer,
-  middleware: (getDefaultMiddleware) => {
-    return getDefaultMiddleware()
-      .concat(api.middleware)
-      .concat(authApi.middleware)
-      .concat(listenerMiddleware.middleware);
-  },
-  preloadedState: loadState(),
-});
 
 // Subscribe untuk menyimpan state ke sessionStorage
 let throttleTimeout: ReturnType<typeof setTimeout> | null = null;

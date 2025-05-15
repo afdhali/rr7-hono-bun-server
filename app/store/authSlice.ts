@@ -1,16 +1,21 @@
 // app/store/authSlice.ts
-import { createSlice } from "@reduxjs/toolkit";
+import { createAction, createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
-import type { RootState } from "./index";
 import type { User } from "~/db/schema";
 import { authApi } from "./authApi";
 
-interface AuthState {
+// Create action untuk mengubah logout status
+export const setLogoutInProgress = createAction<boolean>(
+  "auth/setLogoutInProgress"
+);
+
+// PENTING: Definisi AuthState harus menyertakan logoutInProgress
+export interface AuthState {
   user: Omit<User, "passwordHash"> | null;
   expiresAt: string | null;
   isLoading: boolean;
-  // Tambahkan field source untuk tracking
   source: "server" | "client" | null;
+  logoutInProgress: boolean; // Ini harus ada
 }
 
 const initialState: AuthState = {
@@ -18,6 +23,7 @@ const initialState: AuthState = {
   expiresAt: null,
   isLoading: false,
   source: null,
+  logoutInProgress: false, // Default value
 };
 
 export const authSlice = createSlice({
@@ -32,11 +38,17 @@ export const authSlice = createSlice({
         source?: "server" | "client";
       }>
     ) => {
-      state.user = action.payload.user;
-      state.expiresAt = action.payload.expiresAt;
-      state.source = action.payload.source || "client";
+      // Only set credentials if not in logout process
+      if (!state.logoutInProgress) {
+        state.user = action.payload.user;
+        state.expiresAt = action.payload.expiresAt;
+        state.source = action.payload.source || "client";
+      }
     },
     clearCredentials: (state) => {
+      // Set logout in progress flag
+      state.logoutInProgress = true;
+      // Reset state to initial
       state.user = null;
       state.expiresAt = null;
       state.isLoading = false;
@@ -53,8 +65,8 @@ export const authSlice = createSlice({
         expiresAt: string | null;
       }>
     ) => {
-      // Hanya update jika server memberikan data
-      if (action.payload.user) {
+      // Hanya update jika server memberikan data dan tidak dalam proses logout
+      if (action.payload.user && !state.logoutInProgress) {
         state.user = action.payload.user;
         state.expiresAt = action.payload.expiresAt;
         state.source = "server";
@@ -62,11 +74,17 @@ export const authSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    // Match handlers lama tetap ada
+    // Handle the setLogoutInProgress action
+    builder.addCase(setLogoutInProgress, (state, action) => {
+      state.logoutInProgress = action.payload;
+    });
+
+    // Original matchers unchanged
     builder.addMatcher(
       authApi.endpoints.me.matchFulfilled,
       (state, { payload }) => {
-        if (payload.success && payload.user) {
+        // Only update if not in logout process
+        if (!state.logoutInProgress && payload.success && payload.user) {
           state.user = payload.user;
           // Jika tidak ada expiresAt dari payload, gunakan perkiraan
           if (!state.expiresAt) {
@@ -85,13 +103,15 @@ export const authSlice = createSlice({
     builder.addMatcher(
       authApi.endpoints.refresh.matchFulfilled,
       (state, { payload }) => {
-        if (payload.success) {
+        if (!state.logoutInProgress && payload.success) {
           state.expiresAt = payload.expiresAt;
         }
         state.isLoading = false;
       }
     );
     builder.addMatcher(authApi.endpoints.logout.matchFulfilled, (state) => {
+      // Set logout in progress flag
+      state.logoutInProgress = true;
       state.user = null;
       state.expiresAt = null;
       state.isLoading = false;
@@ -110,11 +130,17 @@ export const authSlice = createSlice({
 export const { setCredentials, clearCredentials, setLoading, syncServerAuth } =
   authSlice.actions;
 
-export const selectAuth = (state: RootState) => state.auth;
-export const selectUser = (state: RootState) => state.auth.user;
-export const selectIsAuthenticated = (state: RootState) => !!state.auth.user;
-export const selectExpiresAt = (state: RootState) => state.auth.expiresAt;
-export const selectIsLoading = (state: RootState) => state.auth.isLoading;
-export const selectAuthSource = (state: RootState) => state.auth.source;
+// Type-safe selectors with minimal type requirements
+export const selectAuth = (state: any) => state.auth as AuthState;
+export const selectUser = (state: any) =>
+  state.auth?.user as Omit<User, "passwordHash"> | null;
+export const selectIsAuthenticated = (state: any) => !!state.auth?.user;
+export const selectExpiresAt = (state: any) =>
+  state.auth?.expiresAt as string | null;
+export const selectIsLoading = (state: any) => !!state.auth?.isLoading;
+export const selectAuthSource = (state: any) =>
+  state.auth?.source as "server" | "client" | null;
+export const selectLogoutInProgress = (state: any) =>
+  !!state.auth?.logoutInProgress;
 
 export default authSlice.reducer;

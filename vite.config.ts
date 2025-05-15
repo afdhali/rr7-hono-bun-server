@@ -25,4 +25,14 @@ export default defineConfig({
     // Plugin untuk resolusi path dari tsconfig
     tsconfigPaths(),
   ],
+  build: {
+    sourcemap: false,
+    minify: "esbuild",
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        sourcemap: false,
+      },
+    },
+  },
 });

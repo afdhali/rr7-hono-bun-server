@@ -1,4 +1,5 @@
-// components/Navbar.tsx
+// components/Navbar.tsx - Ultra Safe Version
+import React from "react";
 import { Link, useLocation } from "react-router";
 import type { User } from "~/db/schema";
 
@@ -18,6 +19,42 @@ export default function Navbar({
   dataSource,
 }: NavbarProps) {
   const location = useLocation();
+
+  // Use ref to prevent multiple logout attempts
+  const logoutInProgressRef = React.useRef(false);
+
+  // Ultra-safe logout handler
+  const handleLogout = React.useCallback(
+    (e: React.MouseEvent) => {
+      // Prevent all default behaviors
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Prevent multiple clicks/calls
+      if (logoutInProgressRef.current) {
+        console.log("Logout already in progress, ignoring additional clicks");
+        return;
+      }
+
+      // Set flag to prevent multiple calls
+      logoutInProgressRef.current = true;
+
+      // Log the action
+      console.log("Navbar: Initiating logout");
+
+      // Call the logout function (with no parameters)
+      onLogout();
+
+      // Disable the button to prevent further clicks
+      const button = e.currentTarget as HTMLButtonElement;
+      if (button) {
+        button.disabled = true;
+        button.classList.add("opacity-50");
+        button.innerText = "Logging out...";
+      }
+    },
+    [onLogout]
+  );
 
   return (
     <header className="bg-white shadow">
@@ -64,7 +101,7 @@ export default function Navbar({
                   {user.email}
                 </div>
                 <button
-                  onClick={onLogout}
+                  onClick={handleLogout}
                   className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                 >
                   Logout

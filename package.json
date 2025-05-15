@@ -44,6 +44,7 @@
     "cross-env": "^7.0.3",
     "drizzle-kit": "^0.31.1",
     "tailwindcss": "^4.1.4",
+    "terser": "^5.39.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.3",

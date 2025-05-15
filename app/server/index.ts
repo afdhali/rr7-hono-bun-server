@@ -40,8 +40,19 @@ declare module "hono" {
 export default await createHonoServer({
   // Opsi untuk konfigurasi server
   defaultLogger: true,
+
   // Konfigurasi middleware dan API endpoints
   async configure(app) {
+    // Add a specific handler for source map files
+    // This must be before setupMiddlewares to ensure it catches all map requests
+    // app.get("*.map", (c) => {
+    //   return c.body(null, 204);
+    // });
+
+    // // Add specific handler for installHook.js
+    // app.get("/installHook.js*", (c) => {
+    //   return c.body(null, 204);
+    // });
     // Setup semua middleware global
     setupMiddlewares(app);
 

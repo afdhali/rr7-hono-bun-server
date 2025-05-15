@@ -7,6 +7,27 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
   const APP_URL = process.env.APP_URL || "http://localhost:5173";
   const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 
+  // First, add a middleware to handle source map requests before CSP
+  // This should be placed BEFORE the secureHeaders middleware
+  app.use("*", async (c, next) => {
+    const path = c.req.path;
+    // Check if this is a source map or development file request
+    if (
+      path.endsWith(".map") ||
+      path.includes("installHook.js") ||
+      path.includes("__vite_") ||
+      path.includes("_dev_")
+    ) {
+      console.log(`[SecureHeaders] Blocking development file: ${path}`);
+      // Return 204 No Content for these requests
+      return c.body(null, 204);
+    }
+
+    // For all other requests, continue to next middleware
+    await next();
+  });
+
+  // Now add the CSP headers with additional configuration
   app.use(
     "*",
     secureHeaders({
@@ -56,6 +77,13 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
 
         // Media sources
         mediaSrc: ["'self'"],
+
+        // Add source map directive - tells browsers not to load source maps
+        // This is not a standard CSP directive but some browsers support it
+        // "report-to": ["'none'"],
+
+        // Add directive to control source map loading
+        // "block-all-mixed-content": true,
       },
 
       // Headers lainnya sudah sesuai
@@ -66,6 +94,24 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
       xDownloadOptions: true,
       xDnsPrefetchControl: true,
       xPermittedCrossDomainPolicies: true,
+
+      // Add custom headers to block source maps
+      // "X-SourceMap": "false",
+      // SourceMap: "false",
     })
   );
+  // Add a custom middleware to add headers specifically for blocking source maps
+  // This header is a non-standard but might help in some browsers
+  app.use("*", async (c, next) => {
+    // Add custom headers to prevent source map loading
+    c.header("X-SourceMap", "false");
+    c.header("SourceMap", "false");
+
+    // If it's a JavaScript file, add specific headers
+    if (c.req.path.endsWith(".js")) {
+      c.header("X-Content-Type-Options", "nosniff");
+    }
+
+    await next();
+  });
 };
