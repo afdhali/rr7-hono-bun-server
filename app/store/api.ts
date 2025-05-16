@@ -1,4 +1,4 @@
-// app/store/api.ts - REVISED VERSION
+// app/store/api.ts - Implementasi yang diperbaiki untuk menangani URL di server
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { User2 } from "types/server";
 
@@ -6,22 +6,26 @@ import type { User2 } from "types/server";
 export interface CustomQueryExtra {
   origin?: string;
   userAgent?: string;
+  // tambahkan properti lain jika diperlukan
 }
 
 // Tipe yang sesuai dengan StartQueryActionCreatorOptions dari RTKQ
 export interface CustomStartQueryOptions {
+  // Properties dari StartQueryActionCreatorOptions
   subscribe?: boolean;
   forceRefetch?: boolean | number;
   subscriptionOptions?: { pollingInterval?: number };
+  // Property tambahan untuk extra
   extra?: CustomQueryExtra;
 }
 
 // Deteksi environment
 const isServer = typeof window === "undefined";
 
-// URL internal untuk server
-const SERVER_INTERNAL_URL = isServer
-  ? process.env.APP_URL || "http://localhost:3000"
+// Konfigurasi URL untuk SSR
+// PERBAIKAN: Pastikan URL absolut untuk server
+const SERVER_BASE_URL = isServer
+  ? process.env.BASE_URL || "http://localhost:3000"
   : "";
 
 // Gunakan APP_ORIGIN dari env
@@ -29,71 +33,82 @@ const APP_ORIGIN =
   process.env.APP_ORIGIN ||
   (typeof window !== "undefined" ? window.location.origin : "");
 
-// Perbaikan: Implementasi customFetchFn yang benar
+// Custom fetch function dengan implementasi yang benar untuk SSR
 const customFetchFn = async (
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> => {
-  // Ekstrak URL dengan benar dari input
-  let url: string;
+  try {
+    // Untuk Request object, ekstrak URL
+    let url: string;
+    let finalInit = init;
 
-  if (input instanceof Request) {
-    // Jika input adalah Request object, ambil URL-nya
-    url = input.url;
-
-    // Jika init tidak ada, gunakan properti dari Request
-    if (!init) {
-      init = {
-        method: input.method,
-        headers: input.headers,
-        body: input.body,
-        mode: input.mode,
-        credentials: input.credentials,
-        cache: input.cache,
-        redirect: input.redirect,
-        referrer: input.referrer,
-        integrity: input.integrity,
-      };
+    if (input instanceof Request) {
+      url = input.url;
+      // Jika tidak ada init, gunakan properties dari Request
+      if (!finalInit) {
+        finalInit = {
+          method: input.method,
+          headers: input.headers,
+          body: input.body,
+          mode: input.mode,
+          credentials: input.credentials,
+          cache: input.cache,
+          redirect: input.redirect,
+          referrer: input.referrer,
+          integrity: input.integrity,
+        };
+      }
+    } else if (input instanceof URL) {
+      url = input.toString();
+    } else {
+      url = input.toString();
     }
-  } else if (input instanceof URL) {
-    // Jika input adalah URL object
-    url = input.href;
-  } else {
-    // Jika input adalah string
-    url = input.toString();
-  }
 
-  // Jika di server dan URL relatif, buat absolut dengan SERVER_INTERNAL_URL
-  if (isServer && url.startsWith("/")) {
-    url = `${SERVER_INTERNAL_URL}${url}`;
-    console.log(`[Server] Using internal URL: ${url}`);
-  }
+    // Perbaikan utama: Di server, pastikan URL adalah absolut
+    if (isServer) {
+      // Jika URL relatif, tambahkan base URL
+      if (url.startsWith("/")) {
+        url = `${SERVER_BASE_URL}${url}`;
+      }
+      // Jika URL tidak memiliki protokol, tambahkan http://
+      else if (!url.match(/^https?:\/\//)) {
+        url = `http://${url}`;
+      }
 
-  // Log URL untuk debugging
-  if (process.env.NODE_ENV === "development") {
-    console.log(`[API] Fetching URL: ${url}`);
-  }
+      console.log(`[Server] Using absolute URL: ${url}`);
+    }
 
-  return fetch(url, init);
+    // Untuk debugging
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[API] ${isServer ? "Server" : "Client"} fetch: ${url}`);
+    }
+
+    // Gunakan URL yang sudah dimodifikasi
+    return fetch(url, finalInit);
+  } catch (error) {
+    console.error(`[API] Fetch error:`, error);
+    throw error;
+  }
 };
 
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
-    baseUrl: "/api",
+    // PERBAIKAN: Gunakan URL base yang berbeda untuk server dan client
+    baseUrl: isServer ? `${SERVER_BASE_URL}/api` : "/api",
     fetchFn: customFetchFn,
     prepareHeaders: (headers, { getState, extra }) => {
       // Cast extra ke tipe custom untuk akses property-nya
       const customExtra = extra as CustomQueryExtra;
 
-      // Set origin
-      const origin =
-        customExtra?.origin ||
-        (typeof window !== "undefined"
-          ? window.location.origin
-          : process.env.APP_ORIGIN || "");
-
-      headers.set("Origin", origin);
+      // Prioritaskan origin dari extra jika ada
+      if (customExtra?.origin) {
+        headers.set("Origin", customExtra.origin);
+      } else {
+        // Jika tidak, gunakan APP_ORIGIN dari env
+        headers.set("Origin", APP_ORIGIN);
+      }
 
       // User-Agent handling
       if (customExtra?.userAgent) {
@@ -107,17 +122,33 @@ export const api = createApi({
       // Tambahkan header lain yang diperlukan untuk API
       headers.set("Accept", "application/json");
 
+      // Log headers untuk debug
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "[API] Request headers:",
+          Object.fromEntries(headers.entries())
+        );
+      }
+
       return headers;
     },
-    // *** PENTING: Gunakan credentials include untuk cookie ***
-    credentials: "include",
+    credentials: "include", // Pastikan cookies disertakan
   }),
   endpoints: (builder) => ({
     getUsers: builder.query<User2[], void>({
-      query: () => "users",
+      query: () => {
+        // PERBAIKAN: Log query execution untuk debugging
+        console.log(`[API] Executing getUsers query (isServer: ${isServer})`);
+        return "users";
+      },
     }),
     getUserById: builder.query<User2, number>({
-      query: (id) => `users/${id}`,
+      query: (id) => {
+        console.log(
+          `[API] Executing getUserById query for id: ${id} (isServer: ${isServer})`
+        );
+        return `users/${id}`;
+      },
     }),
   }),
 });

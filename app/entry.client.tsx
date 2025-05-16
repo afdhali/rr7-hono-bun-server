@@ -4,8 +4,14 @@ import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
 import { Provider } from "react-redux";
 import { store } from "./store";
+import { initializeSuspenseForRTKQuery } from "./store/rtkQueryEnhancers";
 
 // State hydration dihandle oleh store.ts loadState()
+// Inisialisasi Suspense untuk RTK Query
+if (typeof window !== "undefined") {
+  initializeSuspenseForRTKQuery();
+  console.log("[Client] RTK Query Suspense initialized");
+}
 
 startTransition(() => {
   try {

@@ -11,6 +11,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { Provider } from "react-redux";
 import { store } from "./store";
+import React, { Suspense } from "react";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -25,52 +26,65 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
-// export const routeId = "root";
+// Custom ErrorBoundary yang bisa digunakan dengan Suspense
+function SuspenseErrorBoundary({ children }: { children: React.ReactNode }) {
+  return <ErrorBoundaryWrapper>{children}</ErrorBoundaryWrapper>;
+}
 
-// export async function loader({ request, context, params }: Route.LoaderArgs) {
-//   try {
-//     // First check server context directly
-//     const isAuthenticated = await context.isAuthenticated();
+// Component wrapper untuk ErrorBoundary karena function components
+// tidak bisa menjadi error boundaries di React
+class ErrorBoundaryWrapper extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-//     if (!isAuthenticated) {
-//       // Try to check auth cookie directly as a fallback
-//       const hasAuthCookieValue = request.headers
-//         .get("Cookie")
-//         ?.includes("auth_status=authenticated");
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
 
-//       if (!hasAuthCookieValue) {
-//         const params = new URLSearchParams();
-//         params.set("redirectTo", new URL(request.url).pathname);
-//         return redirect(`/login?${params.toString()}`);
-//       }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Error caught by SuspenseErrorBoundary:", error, errorInfo);
+  }
 
-//       // If auth cookie exists but server doesn't recognize auth, try to validate via API
-//       try {
-//         const user = await context.getCurrentUser();
-//         if (!user) {
-//           const params = new URLSearchParams();
-//           params.set("redirectTo", new URL(request.url).pathname);
-//           return redirect(`/login?${params.toString()}`);
-//         }
-//         return { user };
-//       } catch (err) {
-//         console.error("Error validating auth:", err);
-//         const params = new URLSearchParams();
-//         params.set("redirectTo", new URL(request.url).pathname);
-//         return redirect(`/login?${params.toString()}`);
-//       }
-//     }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">
+            Something went wrong
+          </h2>
+          <p className="text-sm text-red-700 mb-4">
+            {this.state.error?.message || "An unknown error occurred"}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-3 py-1 bg-red-100 text-red-800 rounded-md text-sm"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
 
-//     // User is authenticated, return user data
-//     const user = await context.getCurrentUser();
-//     return { user };
-//   } catch (error) {
-//     console.error("Error in about loader:", error);
-//     const params = new URLSearchParams();
-//     params.set("redirectTo", new URL(request.url).pathname);
-//     return redirect(`/login?${params.toString()}`);
-//   }
-// }
+    return this.props.children;
+  }
+}
+
+// Loading fallback untuk root Suspense
+function RootFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite] mb-4"></div>
+        <p>Loading application...</p>
+      </div>
+    </div>
+  );
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -93,7 +107,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Provider store={store}>
-      <Outlet />
+      {/* Wrap the entire app with Suspense and ErrorBoundary */}
+      <SuspenseErrorBoundary>
+        <Suspense fallback={<RootFallback />}>
+          <Outlet />
+        </Suspense>
+      </SuspenseErrorBoundary>
     </Provider>
   );
 }
