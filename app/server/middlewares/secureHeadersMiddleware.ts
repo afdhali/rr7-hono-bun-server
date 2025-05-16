@@ -4,7 +4,7 @@ import { isProduction } from "../utils/environment";
 
 export const setupSecureHeadersMiddleware = (app: Hono) => {
   // Get APP_URL and BASE_URL
-  const APP_URL = process.env.APP_URL || "http://localhost:5173";
+  const APP_URL = process.env.APP_URL || "https://rr7honobun.emeshdev.com";
   const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 
   // First, add a middleware to handle source map requests before CSP
@@ -50,10 +50,14 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
           BASE_URL,
           // Tambahkan URLs tambahan yang mungkin dibutuhkan oleh API Anda
           `${BASE_URL}/api/*`,
+          `${APP_URL}/api/*`,
           // Jika Anda menggunakan websockets
           ...(BASE_URL.startsWith("https")
             ? [`wss://${new URL(BASE_URL).host}`]
             : [`ws://${new URL(BASE_URL).host}`]),
+          ...(APP_URL.startsWith("https")
+            ? [`wss://${new URL(APP_URL).host}`]
+            : [`ws://${new URL(APP_URL).host}`]),
         ],
 
         // Izinkan images dari data URLs dan mungkin CDNs
@@ -77,13 +81,6 @@ export const setupSecureHeadersMiddleware = (app: Hono) => {
 
         // Media sources
         mediaSrc: ["'self'"],
-
-        // Add source map directive - tells browsers not to load source maps
-        // This is not a standard CSP directive but some browsers support it
-        // "report-to": ["'none'"],
-
-        // Add directive to control source map loading
-        // "block-all-mixed-content": true,
       },
 
       // Headers lainnya sudah sesuai

@@ -15,7 +15,8 @@ export const getCookieOptions = (
   httpOnly: true,
   path: "/",
   secure: isSecure,
-  sameSite: isSecure ? ("none" as const) : ("lax" as const), // Use 'none' for cross-site in production
+  // sameSite: isSecure ? ("none" as const) : ("lax" as const),
+  sameSite: "lax" as const,
 });
 
 // Cookie secret dari environment variable

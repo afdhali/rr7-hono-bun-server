@@ -61,8 +61,6 @@ export default await createHonoServer({
   },
 
   getLoadContext(c, options) {
-    const BASE_URL =
-      process.env.BASE_URL || (c.req.url ? new URL(c.req.url).origin : "");
     const user = c.var.user;
     // Gunakan destructuring untuk menghilangkan passwordHash
     const safeUser = user ? (({ passwordHash, ...rest }) => rest)(user) : null;
@@ -109,10 +107,10 @@ export default await createHonoServer({
 
           try {
             console.log("[isAuthenticated] Validating via /api/auth/me");
-            const res = await fetch(`${BASE_URL}/api/auth/me`, {
+            const res = await fetch(`${process.env.BASE_URL}/api/auth/me`, {
               headers: {
                 Cookie: cookies,
-                Origin: c.req.header("Origin") || BASE_URL,
+                Origin: c.req.header("Origin") || process.env.BASE_URL,
                 "User-Agent": c.req.header("User-Agent") || "",
               },
             });
@@ -153,10 +151,10 @@ export default await createHonoServer({
 
           // 3. Fetch user dari API auth/me
           console.log("[getCurrentUser] Fetching user from API");
-          const res = await fetch(`${BASE_URL}/api/auth/me`, {
+          const res = await fetch(`${process.env.BASE_URL}/api/auth/me`, {
             headers: {
               Cookie: cookies,
-              Origin: c.req.header("Origin") || BASE_URL,
+              Origin: c.req.header("Origin") || process.env.BASE_URL,
               "User-Agent": c.req.header("User-Agent") || "",
             },
           });

@@ -1,7 +1,7 @@
 // app/server/middlewares/csrfMiddleware.ts
 import type { Hono } from "hono";
 import { csrf } from "hono/csrf";
-import { isProduction, isDevelopment } from "../utils/environment";
+import { isDevelopment } from "../utils/environment";
 
 export const setupCsrfMiddleware = (app: Hono) => {
   // Gunakan csrf middleware bawaan dari Hono
@@ -19,7 +19,7 @@ export const setupCsrfMiddleware = (app: Hono) => {
             return /^https?:\/\/localhost:[0-9]+$/.test(origin);
           }
         : // Production: Batasi ke domain spesifik
-          process.env.APP_ORIGIN || "http://localhost:3000",
+          process.env.APP_ORIGIN,
     })
   );
 

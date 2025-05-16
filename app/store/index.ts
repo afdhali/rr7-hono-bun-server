@@ -6,7 +6,11 @@ import {
 import { setupListeners } from "@reduxjs/toolkit/query";
 import { api } from "./api";
 import { authApi, hasAuthCookie } from "./authApi";
-import authReducer, { syncServerAuth } from "./authSlice";
+import authReducer from "./authSlice";
+
+// Deteksi environment
+const isServer = typeof window === "undefined";
+const isClient = !isServer;
 
 // Tambahkan listenerMiddleware untuk sinkronisasi state
 const listenerMiddleware = createListenerMiddleware();
@@ -18,7 +22,7 @@ const rootReducer = combineReducers({
   auth: authReducer,
 });
 
-// Buat store terlebih dahulu, kemudian definisikan tipe RootState
+// Buat store
 export const store = configureStore({
   reducer: rootReducer,
   middleware: (getDefaultMiddleware) => {
@@ -28,19 +32,34 @@ export const store = configureStore({
       .concat(listenerMiddleware.middleware);
   },
   preloadedState: loadState(),
+  // Gunakan devTools hanya di client dan non-production
+  devTools: isClient && process.env.NODE_ENV !== "production",
 });
-
-// Definisikan RootState berdasarkan store yang sudah dibuat
-// Ini akan menghasilkan tipe yang spesifik untuk state saat ini
-export type RootState = ReturnType<typeof store.getState>;
 
 // === Helper Functions ===
 
-// Coba muat state dari sessionStorage
+// Coba muat state dari sessionStorage atau window.__PRELOADED_STATE__
 function loadState() {
   try {
+    // Di server, selalu return undefined
     if (typeof window === "undefined") return undefined;
 
+    console.log("[Store] Checking for preloaded state...");
+
+    // Di client, pertama cek preloaded state dari window
+    if (window.__PRELOADED_STATE__) {
+      console.log("[Store] Found preloaded state from server");
+      const preloadedState = window.__PRELOADED_STATE__;
+
+      // Hapus dari window untuk mengurangi memory footprint
+      delete window.__PRELOADED_STATE__;
+
+      return preloadedState;
+    }
+
+    console.log("[Store] No preloaded state, checking sessionStorage");
+
+    // Fallback ke sessionStorage jika tidak ada preloaded state
     const serializedState = sessionStorage.getItem("reduxState");
     if (!serializedState) return undefined;
 
@@ -71,7 +90,8 @@ function loadState() {
 // Fungsi untuk menyimpan state
 const saveState = (state: RootState) => {
   try {
-    if (typeof window === "undefined") return;
+    // Skip di server
+    if (isServer) return;
 
     const serializedState = JSON.stringify({
       auth: state.auth,
@@ -82,18 +102,24 @@ const saveState = (state: RootState) => {
   }
 };
 
-// Subscribe untuk menyimpan state ke sessionStorage
-let throttleTimeout: ReturnType<typeof setTimeout> | null = null;
-store.subscribe(() => {
-  if (throttleTimeout) clearTimeout(throttleTimeout);
+// Subscribe untuk menyimpan state ke sessionStorage (hanya di client)
+if (isClient) {
+  let throttleTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Throttle untuk performa
-  throttleTimeout = setTimeout(() => {
-    saveState(store.getState());
-  }, 1000);
-});
+  store.subscribe(() => {
+    if (throttleTimeout) clearTimeout(throttleTimeout);
+
+    // Throttle untuk performa
+    throttleTimeout = setTimeout(() => {
+      saveState(store.getState());
+    }, 1000);
+  });
+}
 
 // Setup listeners untuk RTK Query
 setupListeners(store.dispatch);
 
+// Definisikan RootState berdasarkan store yang sudah dibuat
+// Ini akan menghasilkan tipe yang spesifik untuk state saat ini
+export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

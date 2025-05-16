@@ -73,14 +73,15 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   try {
     // Direct API call untuk menangani cookies dengan benar
-    const apiUrl = process.env.BASE_URL || new URL(request.url).origin;
+    // fetch di sisi server
+    const apiUrl = process.env.BASE_URL;
     console.log("Login attempt via server action with:", email);
 
     const response = await fetch(`${apiUrl}/api/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Origin: new URL(request.url).origin,
+        Origin: process.env.APP_URL || new URL(request.url).origin,
         "User-Agent": request.headers.get("User-Agent") || "",
       },
       body: JSON.stringify({ email, password }),

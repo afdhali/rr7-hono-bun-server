@@ -5,7 +5,7 @@
 
 // Get APP_URL dari environment variables
 const APP_URL =
-  process.env.BASE_URL ||
+  process.env.APP_URL ||
   (typeof window !== "undefined" ? window.location.origin : "");
 
 /**

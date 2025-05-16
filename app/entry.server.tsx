@@ -1,3 +1,4 @@
+// app/entry.server.tsx
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server.bun";
 import type { AppLoadContext, EntryContext } from "react-router";
@@ -6,10 +7,12 @@ import { store } from "./store";
 import {
   api,
   getRunningQueriesThunk,
+  injectPreloadedState,
   type CustomStartQueryOptions,
 } from "./store/api";
 import { Provider } from "react-redux";
 import { syncServerAuth } from "./store/authSlice";
+import { getRoutePrefetchConfig } from "./utils/routeUtils";
 
 export default async function handleRequest(
   request: Request,
@@ -101,32 +104,79 @@ export default async function handleRequest(
 
   // Pre-fetch data for certain routes
   try {
-    if (url.pathname.match(/^\/users$/)) {
-      store.dispatch(
-        api.endpoints.getUsers.initiate(undefined, queryOptions as any)
+    console.log(`[Server] Analyzing route for prefetch: ${url.pathname}`);
+
+    // Get prefetch configuration for this route
+    const prefetchConfig = getRoutePrefetchConfig(url.pathname);
+
+    // Check if we should prefetch for this route
+    if (!prefetchConfig.shouldPrefetch) {
+      console.log(
+        `[Server] No prefetch needed: ${
+          prefetchConfig.description || prefetchConfig.reason
+        }`
       );
-    } else if (url.pathname.match(/^\/users\/(\d+)$/)) {
-      const id = parseInt(url.pathname.split("/").pop() || "0");
-      if (!isNaN(id)) {
+    } else {
+      // Prepare query options
+      const queryOptions: CustomStartQueryOptions = {
+        subscribe: false,
+        forceRefetch: true,
+        extra: {
+          origin: clientOrigin || undefined,
+          userAgent: userAgent || undefined,
+        },
+      };
+
+      console.log(
+        `[Server] Prefetching for: ${prefetchConfig.description} (${url.pathname})`
+      );
+
+      // Dispatch the appropriate query based on endpoint from config
+      if (prefetchConfig.endpoint === "getUsers") {
+        console.log("[Server] Dispatching getUsers query");
         store.dispatch(
-          api.endpoints.getUserById.initiate(id, queryOptions as any)
+          api.endpoints.getUsers.initiate(undefined, queryOptions)
+        );
+      } else if (
+        prefetchConfig.endpoint === "getUserById" &&
+        typeof prefetchConfig.params === "number"
+      ) {
+        console.log(
+          `[Server] Dispatching getUserById query for id: ${prefetchConfig.params}`
+        );
+        store.dispatch(
+          api.endpoints.getUserById.initiate(
+            prefetchConfig.params,
+            queryOptions
+          )
         );
       }
-    }
 
-    // IMPROVEMENT: Await queries dengan timeout untuk menghindari hang
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Query timeout")), 3000)
-    );
+      // Wait for queries to complete
+      console.log("[Server] Waiting for all queries to complete...");
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Query timeout")), 3000)
+        );
 
-    try {
-      await Promise.race([
-        Promise.all(store.dispatch(getRunningQueriesThunk())),
-        timeoutPromise,
-      ]);
-    } catch (queryError) {
-      console.warn("[Server] Query timeout or error:", queryError);
-      // Continue with rendering even if queries time out
+        await Promise.race([
+          Promise.all(store.dispatch(getRunningQueriesThunk())),
+          timeoutPromise,
+        ]);
+
+        // Debug: Log state after prefetch
+        if (process.env.NODE_ENV === "development") {
+          const apiState = store.getState()[api.reducerPath];
+          const queryCount = Object.keys(apiState?.queries || {}).length;
+          console.log(
+            `[Server] RTK Query state after prefetch: ${queryCount} queries`
+          );
+        }
+
+        console.log("[Server] All queries completed successfully");
+      } catch (queryError) {
+        console.warn("[Server] Query timeout or error:", queryError);
+      }
     }
   } catch (prefetchError) {
     console.error("[Server] Prefetch error:", prefetchError);
@@ -135,7 +185,8 @@ export default async function handleRequest(
 
   // IMPROVEMENT 4: Improved error handling for renderToReadableStream
   try {
-    const body = await renderToReadableStream(
+    // Render aplikasi React menggunakan Redux Provider
+    const stream = await renderToReadableStream(
       <Provider store={store}>
         <ServerRouter context={routerContext} url={request.url} />
       </Provider>,
@@ -164,16 +215,27 @@ export default async function handleRequest(
           setTimeout(() => reject(new Error("allReady timeout")), 3000)
         );
 
-        await Promise.race([body.allReady, timeoutPromise]);
+        await Promise.race([stream.allReady, timeoutPromise]);
       } catch (allReadyError) {
         console.warn("[Server] allReady timeout or error:", allReadyError);
         // Continue anyway
       }
     }
 
+    // Convert stream to string to inject the Redux state
+    const html = await streamToString(stream);
+
+    // Get current Redux state
+    const preloadedState = store.getState();
+
+    // Inject state into HTML
+    const finalHtml = injectPreloadedState(html, preloadedState);
+
+    // Set response headers
     responseHeaders.set("Content-Type", "text/html");
 
-    return new Response(body, {
+    // Return final HTML with injected state
+    return new Response(finalHtml, {
       headers: responseHeaders,
       status: responseStatusCode,
     });
@@ -211,4 +273,42 @@ export default async function handleRequest(
       status: 200, // Use 200 for the fallback
     });
   }
+}
+
+// Helper function untuk mengkonversi stream ke string
+async function streamToString(stream: ReadableStream): Promise<string> {
+  console.log("[Server] Converting stream to string for state injection...");
+
+  // Gunakan Buffer untuk mengumpulkan chunks
+  const chunks: Uint8Array[] = [];
+  const reader = stream.getReader();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+  } catch (error) {
+    console.error("[Server] Error while reading stream:", error);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Gabung semua chunks dan decode
+  const buffer = new Uint8Array(
+    chunks.reduce((acc, chunk) => acc + chunk.length, 0)
+  );
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  const decoder = new TextDecoder();
+  const html = decoder.decode(buffer);
+
+  console.log("[Server] Stream converted to string successfully");
+  return html;
 }
