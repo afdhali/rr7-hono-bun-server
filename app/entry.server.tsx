@@ -38,13 +38,13 @@ export default async function handleRequest(
     return new Response(null, { status: 204 });
   }
 
-  // IMPROVEMENT 2: Deteksi proses logout
+  // IMPROVEMENT 2: Process Logout Detection
   const isLogoutRequest =
     url.pathname === "/api/auth/logout" ||
     url.pathname === "/api/auth/logout-all";
 
   if (isLogoutRequest) {
-    // Jika request ke endpoint logout, jangan render dengan SSR
+    // if there is request to logout endpoint, dont be rendered by SSR
     responseHeaders.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ success: true }), {
       headers: responseHeaders,
@@ -60,7 +60,7 @@ export default async function handleRequest(
     },
   };
 
-  // IMPROVEMENT 3: Cek auth status dengan penanganan error yang lebih baik
+  // IMPROVEMENT 3: Check AUTH Status on Server Side - Best thing about react-router-hono-server
   if (url.pathname.startsWith("/about")) {
     try {
       const cookies = request.headers.get("Cookie") || "";
@@ -78,7 +78,7 @@ export default async function handleRequest(
               const user = await _loadContext.getCurrentUser();
               if (user) {
                 console.log("[Server] User authenticated for SSR:", user.email);
-                // Hydrate auth state untuk SSR
+                // Hydrate auth state for SSR
                 store.dispatch(
                   syncServerAuth({
                     user,
@@ -185,7 +185,7 @@ export default async function handleRequest(
 
   // IMPROVEMENT 4: Improved error handling for renderToReadableStream
   try {
-    // Render aplikasi React menggunakan Redux Provider
+    // Rendering React app including redux store
     const stream = await renderToReadableStream(
       <Provider store={store}>
         <ServerRouter context={routerContext} url={request.url} />
@@ -275,7 +275,7 @@ export default async function handleRequest(
   }
 }
 
-// Helper function untuk mengkonversi stream ke string
+// Helper function react router stream to string
 async function streamToString(stream: ReadableStream): Promise<string> {
   console.log("[Server] Converting stream to string for state injection...");
 

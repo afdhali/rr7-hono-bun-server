@@ -8,6 +8,7 @@ import {
   useNavigate,
   useSearchParams,
   redirect,
+  Link,
 } from "react-router";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
@@ -133,6 +134,8 @@ export default function Login() {
 
   // Check for session expired message
   const sessionExpired = searchParams.get("sessionExpired") === "true";
+  // Check for registration success message
+  const registeredSuccess = searchParams.get("registered") === "true";
 
   // React Hook Form setup
   const {
@@ -231,19 +234,16 @@ export default function Login() {
             <h1 className="text-3xl font-bold text-gray-900">Login</h1>
             <p className="mt-2 text-gray-600">Sign in to access your account</p>
           </div>
-
           {actionData?.error && (
             <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
               <p>{actionData.error}</p>
             </div>
           )}
-
           {sessionExpired && (
             <div className="mb-4 rounded-md bg-amber-50 p-4 text-sm text-amber-700">
               <p>Your session has expired. Please log in again.</p>
             </div>
           )}
-
           <Form method="post" className="space-y-6" onSubmit={validateForm}>
             {/* Hidden redirect field */}
             <input type="hidden" name="redirectTo" value={redirectTo} />
@@ -361,6 +361,19 @@ export default function Login() {
               </button>
             </div>
           </Form>
+
+          {/* Registration link */}
+          <div className="mt-6 text-center text-sm">
+            <p className="text-gray-600">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                className="text-indigo-600 hover:text-indigo-500"
+              >
+                Create one now
+              </Link>
+            </p>
+          </div>
 
           {/* Debug button - only in development */}
           {process.env.NODE_ENV === "development" && (

@@ -46,6 +46,9 @@ const DUMMY_USER: Omit<User, "passwordHash"> = {
   firstName: null,
   lastName: null,
   role: "user",
+  isVerified: false,
+  verificationToken: null,
+  verificationTokenExpiry: null,
   createdAt: new Date(0),
   updatedAt: new Date(0),
 };

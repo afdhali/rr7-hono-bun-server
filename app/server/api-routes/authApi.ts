@@ -2,7 +2,9 @@
 import type { Hono, Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { AuthService } from "../services/auth.service";
+
 import { requireAuth } from "../middlewares/authMiddleware";
 import {
   getCookieOptions,
@@ -11,8 +13,11 @@ import {
   deleteAuthCookie,
 } from "../utils/cookie";
 import { deleteCookie, setCookie } from "hono/cookie";
+import { db } from "~/db";
+import { users } from "~/db/schema";
+import { AuthController } from "../controllers/authController";
 
-// Define schema secara terpisah
+// Define schemas separately
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z
@@ -53,13 +58,13 @@ const setAuthCookies = async (
     refreshTokenExpiresIn: number;
   }
 ) => {
-  // Set access token dengan signed cookie
+  // Set access token with signed cookie
   await setAuthSignedCookie(c, "access_token", accessToken, {
     ...getCookieOptions(),
     maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
   });
 
-  // Set refresh token dengan signed cookie
+  // Set refresh token with signed cookie
   await setAuthSignedCookie(c, "refresh_token", refreshToken, {
     ...getCookieOptions(),
     maxAge: Math.floor((refreshTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
@@ -83,7 +88,7 @@ export const setupAuthApiRoutes = (app: Hono) => {
     try {
       const { email, password } = await c.req.json();
 
-      // Get metadata untuk logging dan keamanan
+      // Get metadata for logging and security
       const userAgent = c.req.header("User-Agent") || "";
       const ipAddress =
         c.req.header("X-Forwarded-For") ||
@@ -102,55 +107,102 @@ export const setupAuthApiRoutes = (app: Hono) => {
         ? "Edge"
         : "Other";
 
-      const {
-        user,
-        accessToken,
-        refreshToken,
-        accessTokenExpiresIn,
-        refreshTokenExpiresIn,
-      } = await AuthService.login(email, password, {
-        userAgent,
-        ipAddress,
-        family,
-      });
+      try {
+        // Check if user is verified
+        const user = await db.query.users.findFirst({
+          where: eq(users.email, email),
+        });
 
-      // Set signed cookies with JWT tokens
-      await setAuthCookies(c, {
-        accessToken,
-        refreshToken,
-        accessTokenExpiresIn,
-        refreshTokenExpiresIn,
-      });
+        if (user && !user.isVerified) {
+          // If user found but not verified
+          return c.json(
+            {
+              success: false,
+              message:
+                "Email not verified. Please check your email for the verification link.",
+              requiresVerification: true,
+              email, // Return email so client can offer to resend verification
+            },
+            403
+          );
+        }
 
-      // Add non-httpOnly cookie for client-side auth detection
-      // PENTING: Cookie ini tidak berisi data sensitif
-      await setCookie(c, "auth_status", "authenticated", {
-        ...getCookieOptions(),
-        httpOnly: false, // Pastikan bisa dibaca oleh JavaScript
-        maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000),
-      });
+        // Continue with normal login process
+        const {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+          accessTokenExpiresIn,
+          refreshTokenExpiresIn,
+        } = await AuthService.login(email, password, {
+          userAgent,
+          ipAddress,
+          family,
+        });
 
-      // Security headers for auth responses
-      c.header("Cache-Control", "no-store, max-age=0");
-      c.header("Pragma", "no-cache");
+        // Set signed cookies with JWT tokens
+        await setAuthCookies(c, {
+          accessToken,
+          refreshToken,
+          accessTokenExpiresIn,
+          refreshTokenExpiresIn,
+        });
 
-      // Return user tanpa password hash
-      const { passwordHash, ...userWithoutPassword } = user;
+        // Add non-httpOnly cookie for client-side auth detection
+        // IMPORTANT: This cookie doesn't contain sensitive data
+        await setCookie(c, "auth_status", "authenticated", {
+          ...getCookieOptions(),
+          httpOnly: false, // Ensure it can be read by JavaScript
+          maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000),
+        });
 
-      return c.json({
-        success: true,
-        user: userWithoutPassword,
-        expiresAt: new Date(accessTokenExpiresIn).toISOString(),
-      });
-    } catch (error) {
-      // Check if it's a ZodError (from zValidator)
-      if (error instanceof z.ZodError) {
-        // Generik error untuk production
+        // Security headers for auth responses
+        c.header("Cache-Control", "no-store, max-age=0");
+        c.header("Pragma", "no-cache");
+
+        // Return user without password hash
+        const { passwordHash, ...userWithoutPassword } = loggedInUser;
+
+        return c.json({
+          success: true,
+          user: userWithoutPassword,
+          expiresAt: new Date(accessTokenExpiresIn).toISOString(),
+        });
+      } catch (error) {
+        // Check if error is about unverified email
+        if (
+          error instanceof Error &&
+          error.message.includes("Email not verified")
+        ) {
+          return c.json(
+            {
+              success: false,
+              message: error.message,
+              requiresVerification: true,
+              email, // Return email so client can offer to resend verification
+            },
+            403
+          );
+        }
+
+        // Other errors
         return c.json(
           {
             success: false,
-            message: "Email or Password is Invalid",
-            // Hanya include details di development
+            message: error instanceof Error ? error.message : "Login failed",
+          },
+          401
+        );
+      }
+    } catch (error) {
+      // Check if it's a ZodError (from zValidator)
+      if (error instanceof z.ZodError) {
+        // Generic error for production
+        return c.json(
+          {
+            success: false,
+            message: "Invalid email or password",
+            // Only include details in development
             ...(process.env.NODE_ENV === "development" && {
               details: error.format(),
             }),
@@ -171,17 +223,17 @@ export const setupAuthApiRoutes = (app: Hono) => {
   // Refresh token endpoint
   app.post("/api/auth/refresh", async (c) => {
     try {
-      // Get refresh token dari signed cookie
+      // Get refresh token from signed cookie
       const refreshToken = await getAuthSignedCookie(c, "refresh_token");
 
       if (refreshToken === false) {
         return c.json(
-          { success: false, message: "No refresh token provided" },
+          { success: false, message: "Refresh token not available" },
           401
         );
       }
 
-      // Request new tokens dengan refresh token
+      // Request new tokens with refresh token
       const {
         accessToken,
         refreshToken: newRefreshToken,
@@ -205,7 +257,7 @@ export const setupAuthApiRoutes = (app: Hono) => {
         maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000),
       });
 
-      // Return user tanpa password hash
+      // Return user without password hash
       const { passwordHash, ...userWithoutPassword } = user;
 
       return c.json({
@@ -214,64 +266,77 @@ export const setupAuthApiRoutes = (app: Hono) => {
         expiresAt: new Date(accessTokenExpiresIn).toISOString(),
       });
     } catch (error) {
-      // Clear cookies jika refresh gagal
+      // Clear cookies if refresh fails
       clearAuthCookies(c);
 
       return c.json(
         {
           success: false,
           message:
-            error instanceof Error ? error.message : "Failed to refresh token",
+            error instanceof Error ? error.message : "Token refresh failed",
         },
         401
       );
     }
   });
 
-  // Register route
+  // Register route - using AuthController
   app.post(
     "/api/auth/register",
     zValidator("json", registerSchema),
     async (c) => {
-      try {
-        const userData = await c.req.json();
+      return c.json(await AuthController.register(c));
+    }
+  );
 
-        // By default, all users register as 'user' role
-        const user = await AuthService.register({
-          ...userData,
-          role: "user", // Default role
-        });
+  // Email verification route - using AuthController
+  app.get("/api/auth/verify-email", async (c) => {
+    return c.json(await AuthController.verifyEmail(c));
+  });
 
-        // Return user without password hash
-        const { passwordHash, ...userWithoutPassword } = user;
+  // Resend verification email route - using AuthController
+  app.post("/api/auth/resend-verification", async (c) => {
+    return c.json(await AuthController.resendVerification(c));
+  });
 
-        return c.json(
-          {
-            success: true,
-            user: userWithoutPassword,
-          },
-          201
-        );
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          return c.json({
-            success: false,
-            message: {
-              details: error.format(),
-            },
-          });
-        }
+  // Check email verification status
+  app.post("/api/auth/check-verification", async (c) => {
+    try {
+      const { email } = await c.req.json();
+
+      if (!email || typeof email !== "string" || !email.includes("@")) {
         return c.json(
           {
             success: false,
-            message:
-              error instanceof Error ? error.message : "Registration failed",
+            message: "Email is required",
           },
           400
         );
       }
+
+      // This endpoint intentionally doesn't disclose whether an account exists
+      // for security reasons - only returns whether it's verified or not if it exists
+      const user = await db.query.users.findFirst({
+        where: eq(users.email, email),
+      });
+
+      return c.json({
+        success: true,
+        isVerified: user ? user.isVerified : false,
+      });
+    } catch (error) {
+      return c.json(
+        {
+          success: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to check verification status",
+        },
+        500
+      );
     }
-  );
+  });
 
   // Updated logout route
   app.post("/api/auth/logout", async (c) => {

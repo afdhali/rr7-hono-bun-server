@@ -56,3 +56,28 @@ export const requireAdmin = createMiddleware<{
 
   await next();
 });
+
+// Middleware for checking if email was verified
+export const requireVerifiedEmail = createMiddleware<{
+  Variables: AppVariables;
+}>(async (c, next) => {
+  const user = c.var.user;
+
+  if (!user) {
+    return c.json({ success: false, message: "Authentication required" });
+  }
+
+  if (!user.isVerified) {
+    return c.json(
+      {
+        success: false,
+        message: "Your Email was not verified, Please verify before continoue",
+        requiresVerification: true,
+        email: user.email, //Return email so client can offer to resend verification
+      },
+      403
+    );
+  }
+
+  await next();
+});

@@ -1,318 +1,279 @@
-# HonoStack - React Router v7 Framework Mode with Hono API
+# React Router v7 Framework Mode dengan Hono JS & Bun
 
-HonoStack adalah template project yang menggabungkan kekuatan React Router v7 dalam Framework Mode dengan Hono sebagai backend API. Template ini memungkinkan pengembangan full-stack dalam satu repository dengan berbagi tipe antara frontend dan backend.
+Repository ini berisi implementasi template full-stack menggunakan React Router v7 Framework Mode yang diintegrasikan dengan Hono JS menggunakan adapter [react-router-hono-server](https://github.com/rphlmr/react-router-hono-server).
 
-## Fitur
+## Teknologi Utama
 
-- ⚡ React Router v7 Framework Mode untuk routing dan data loading
-- 🔥 Hono sebagai backend API yang ultra-cepat dan ringan
-- 📦 Struktur project yang terorganisir untuk API dan frontend
-- 🧩 TypeScript untuk type-safety di seluruh aplikasi
-- 🎨 Tailwind CSS untuk styling
-- ⚙️ Bun runtime untuk development dan production
-- 🔄 Hot Module Replacement (HMR) dengan Vite
+- **React Router v7** - Framework React - sebelumnya Remix Run [react-router](https://reactrouter.com/)
+- **Hono JS** - Framework server ringan dan cepat [hono](https://hono.dev/)
+- **Bun** - JavaScript runtime dan bundler [bun](https://bun.sh/)
+- **Redux Toolkit & RTK Query** - Manajemen state dan data fetching [redux toolkit](https://redux-toolkit.js.org/)
+- **Drizzle ORM** - Query builder untuk database SQL [drizzle](https://orm.drizzle.team/)
+- **TypeScript** - Type safety untuk development
 
-## Prasyarat
+## Fitur yang Tersedia
 
-- [Bun](https://bun.sh) (v1.x atau lebih baru)
-- Node.js (v18.x atau lebih baru)
+- **Sistem Autentikasi Lengkap**:
 
-## Instalasi
+  - Login/Register dengan JWT (disimpan dalam HTTP-only cookies)
+  - Email verifikasi untuk registrasi pengguna baru
+  - Token refresh otomatis
+  - Perlindungan rute berbasis autentikasi
+  - sistem role-based access control (RBAC)
+  - Manajemen session
 
-1. Pastikan Bun sudah terinstal di sistem Anda:
+- **Google OAuth** - Segera Hadir
+
+- **Pre-fetching Data**:
+
+  - Contoh prefetch menggunakan RTK Query di rute `/users` dan `/users/:id`
+  - Dukungan Suspense pada RTK Query
+
+- **SSR (Server Side Rendering)**:
+
+  - Hydration state antara server dan client
+  - Error handling untuk rendering yang gagal
+
+- **Middleware Keamanan**:
+
+  - CSRF Protection
+  - Secure Headers
+  - Fingerprinting untuk validasi token
+
+- **Dokumentasi**:
+  - Debug Console yang komprehensif
+
+## Prasyarat - PENTING !!
+
+- [Bun](https://bun.sh/) (versi terbaru)
+- [React Router v7 Framework Mode](https://reactrouter.com/)
+- [react-router-hono-server](https://github.com/rphlmr/react-router-hono-server)
+
+## Cara Memulai
+
+### Instalasi
+
+1. Clone repository ini
+2. Install dependensi dengan Bun:
 
 ```bash
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
-
-# Verifikasi instalasi
-bun --version
-```
-
-2. Clone repository dan instal dependency:
-
-```bash
-# Clone repository (ganti dengan repo Anda)
-git clone https://github.com/afdhali/rr7-honobun.git
-cd honostack
-
-# Instal dependency
 bun install
 ```
 
-## Development
-
-Untuk menjalankan aplikasi di mode development:
+3. Salin file `.env.sample` ke `.env` dan sesuaikan dengan konfigurasi Anda:
 
 ```bash
-bun run dev
+cp .env.sample .env
 ```
 
-Aplikasi akan berjalan di http://localhost:5173 (React Router) dengan API endpoint di http://localhost:5173/api.
+4. Atur variabel lingkungan Anda:
 
-## Production Build
+```
+BUN_VERSION="1.x.x"  # Sesuaikan dengan versi Bun Anda
 
-Untuk membuild aplikasi untuk production:
+# URL Server internal, jangan gunakan nama domain
+# Untuk mode Dev, gunakan http://localhost:5173
+BASE_URL="http://localhost:3000"
+
+# Jika tanpa domain, mode DEV menggunakan http://localhost:5713, mode PROD menggunakan http://localhost:3000
+APP_URL="https://domain-anda.com"
+DATABASE_URL="url-database-anda"
+
+ACCESS_TOKEN_SECRET="rahasia-token-akses-anda"
+REFRESH_TOKEN_SECRET="rahasia-token-refresh-anda"
+
+COOKIE_SECRET="rahasia-cookie-anda"
+
+# Untuk CSRF Origin
+APP_ORIGIN="https://domain-anda.com"
+
+# EMAIL
+RESEND_API_KEY="api-key-resend-anda"
+DEFAULT_FROM_EMAIL="email@domain-resend-terdaftar-anda"
+```
+
+### Database
+
+Gunakan perintah Drizzle untuk mengelola database Anda:
 
 ```bash
+# Generate skema database
+bunx drizzle-kit generate
+
+# Migrasi database
+bunx drizzle-kit migrate
+
+# Push skema ke database
+bunx drizzle-kit push
+```
+
+### Menjalankan Aplikasi
+
+```bash
+# Mode development
+bun dev
+
+# Build untuk production
 bun run build
+
+# Menjalankan versi production
+bun start
 ```
 
-File build akan tersedia di folder `build/`.
+## Cara Menggunakan
 
-Untuk menjalankan versi production:
+### Rute yang Tersedia
 
-```bash
-bun run start
+- `/` - Halaman Utama
+- `/login` - Halaman Login
+- `/register` - Halaman Registrasi
+- `/verify-email` - Verifikasi Email
+- `/verification-pending` - Menunggu Verifikasi Email
+- `/about` - Halaman Terlindungi (Memerlukan Autentikasi)
+- `/users` - Daftar Pengguna (Contoh Prefetch)
+- `/users/:id` - Detail Pengguna (Contoh Prefetch)
+
+### Autentikasi
+
+Sistem ini menggunakan JWT (JSON Web Token) untuk autentikasi dengan dua token:
+
+1. **Access Token** - Disimpan dalam HTTP-only cookie, berumur pendek (15 menit)
+2. **Refresh Token** - Disimpan dalam database dan HTTP-only cookie, berumur panjang (7 hari)
+
+Implementasi mencakup:
+
+- Rotasi token refresh
+- Validasi token dengan fingerprinting
+- Pencabutan token
+- Email verifikasi untuk pengguna baru
+
+### Hook useAuth
+
+Hook `useAuth` adalah cara utama untuk mengakses dan mengelola status autentikasi di komponen React Anda. Contoh penggunaan dapat dilihat di `routes/about/layout.tsx`.
+
+```tsx
+const { user, isAuthenticated, logout, refreshToken } = useAuth();
+
+// Cek apakah user terautentikasi
+if (isAuthenticated) {
+  // Lakukan sesuatu untuk user yang terautentikasi
+}
+
+// Logout user
+const handleLogout = () => {
+  logout();
+};
+
+// Refresh token secara manual
+const handleRefresh = async () => {
+  await refreshToken();
+};
 ```
 
-Server akan berjalan di http://localhost:3000.
+### Prefetching Data
+
+Untuk melakukan prefetch data, Anda perlu:
+
+1. Menambahkan konfigurasi prefetch di `entry.server.tsx` (lihat pattern yang sudah ada)
+2. Menggunakan RTK Query untuk mengambil data
+
+Contoh prefetch sudah disediakan pada rute `/users` dan `/users/:id`.
+
+## Aliran Data ke Hono JS
+
+Ada dua cara untuk mengirim/mengambil data ke/dari Hono JS:
+
+### 1. Menggunakan AppLoadContext React Router
+
+React Router menyediakan AppLoadContext melalui adapter `react-router-hono-server` yang memungkinkan akses langsung ke controller server:
+
+```tsx
+// Dalam loader atau action
+export async function loader({ request, context }: Route.LoaderArgs) {
+  // Menggunakan controller secara langsung
+  const isAuthenticated = await context.isAuthenticated();
+  const user = await context.getCurrentUser();
+
+  // Untuk auth controller
+  const result = await context.authControllers.verifyEmail(token);
+
+  return { user, isAuthenticated };
+}
+```
+
+### 2. Menggunakan Fetch API
+
+Alternatif untuk menggunakan Fetch API langsung dalam loader atau action:
+
+```tsx
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
+
+  const response = await fetch(`${process.env.BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  // Handle response
+  if (!response.ok) {
+    // Handle error
+  }
+
+  return await response.json();
+}
+```
 
 ## Struktur Project
 
 ```
-honostack/
-├── app/                      # Direktori utama aplikasi
-│   ├── routes/               # Route React Router
-│   │   ├── _layout.tsx       # Layout utama
-│   │   ├── users.tsx         # Route untuk daftar users
-│   │   ├── users.$id.tsx     # Route untuk detail user
-│   │   └── +types/           # Type definitions untuk routes
-│   ├── server/               # Server Hono
-│   │   ├── api-routes/       # API routes
-│   │   │   ├── index.ts
-│   │   │   ├── userApi.ts
-│   │   │   └── productApi.ts
-│   │   ├── controllers/      # Controllers untuk API
-│   │   │   ├── userController.ts
-│   │   │   └── productController.ts
-│   │   ├── middlewares/      # Middlewares Hono
-│   │   │   ├── index.ts
-│   │   │   ├── loggerMiddleware.ts
-│   │   │   └── corsMiddleware.ts
-│   │   ├── models/           # Models untuk data
-│   │   │   ├── userModel.ts
-│   │   │   └── productModel.ts
-│   │   ├── utils/            # Utility functions
-│   │   │   └── responseHelper.ts
-│   │   └── index.ts          # Entry point server
-│   ├── entry.client.tsx      # Entry point client
-│   ├── entry.server.tsx      # Entry point SSR
-│   └── server.ts             # File untuk mengekspor server
-├── public/                   # File publik statis
-├── types/                    # Tipe global
-│   └── server.ts             # Tipe untuk server dan API
-├── react-router.config.ts    # Konfigurasi React Router
-├── tsconfig.json             # Konfigurasi TypeScript
-├── tailwind.config.ts        # Konfigurasi Tailwind
-└── vite.config.ts            # Konfigurasi Vite
+app/
+├── components/         # Komponen React yang dapat digunakan kembali
+├── db/                 # Konfigurasi dan skema database
+├── hooks/              # Custom React hooks (termasuk useAuth)
+├── routes/             # Komponen dan logika routing
+│   ├── +types/         # Definisi tipe untuk rute
+│   ├── about/          # Rute yang dilindungi
+│   ├── login.tsx       # Halaman login
+│   ├── register.tsx    # Halaman registrasi
+│   ├── verify-email.tsx # Verifikasi email
+│   └── ...             # Rute lainnya
+├── server/             # Kode sisi server
+│   ├── controllers/    # Logika controller
+│   ├── middlewares/    # Middleware server
+│   ├── models/         # Model data
+│   └── services/       # Layanan business logic
+│   └── index           # Main Setup Server Hono - definisikan getLoadContext
+├── store/              # Konfigurasi Redux store
+│   ├── api.ts          # Setup RTK Query API
+│   ├── authApi.ts      # API untuk autentikasi
+│   └── authSlice.ts    # State untuk autentikasi
+├── types/              # Definisi tipe global
+├── utils/              # Utility functions
+├── app.css             # Stylesheet utama
+├── entry.client.tsx    # Entry point untuk client
+├── entry.server.tsx    # Entry point untuk server
+├── root.tsx            # Komponen root react
+└── routes.ts           # Konfigurasi rute react-router
 ```
 
-## Membuat API dengan Hono
+## Pengembangan Lebih Lanjut
 
-### 1. Menambahkan Model
+Beberapa ide untuk pengembangan selanjutnya:
 
-Buat file model di `app/server/models/`:
-
-```typescript
-// app/server/models/exampleModel.ts
-export interface Example {
-  id: number;
-  name: string;
-  description: string;
-}
-
-export const examples: Example[] = [
-  { id: 1, name: "Example 1", description: "Description 1" },
-  { id: 2, name: "Example 2", description: "Description 2" },
-];
-
-export const ExampleModel = {
-  findAll: () => examples,
-  findById: (id: number) => examples.find((e) => e.id === id),
-  // ... method lainnya
-};
-```
-
-### 2. Menambahkan Controller
-
-Buat file controller di `app/server/controllers/`:
-
-```typescript
-// app/server/controllers/exampleController.ts
-import type { Context } from "hono";
-import { ExampleModel } from "../models/exampleModel";
-
-export const ExampleController = {
-  getAll: (c: Context) => {
-    return c.json(ExampleModel.findAll());
-  },
-
-  getById: (c: Context) => {
-    const id = parseInt(c.req.param("id"));
-    const example = ExampleModel.findById(id);
-
-    if (!example) {
-      return c.status(404).json({ error: "Example not found" });
-    }
-
-    return c.json(example);
-  },
-
-  // ... method lainnya
-};
-```
-
-### 3. Menambahkan API Route
-
-Buat file route di `app/server/api-routes/`:
-
-```typescript
-// app/server/api-routes/exampleApi.ts
-import type { Hono } from "hono";
-import { ExampleController } from "../controllers/exampleController";
-
-export const setupExampleApiRoutes = (app: Hono) => {
-  app.get("/api/examples", ExampleController.getAll);
-  app.get("/api/examples/:id", ExampleController.getById);
-  // ... endpoint lainnya
-};
-```
-
-### 4. Mengupdate API Routes Index
-
-Update file `app/server/api-routes/index.ts`:
-
-```typescript
-// app/server/api-routes/index.ts
-import type { Hono } from "hono";
-import { setupUserApiRoutes } from "./userApi";
-import { setupProductApiRoutes } from "./productApi";
-import { setupExampleApiRoutes } from "./exampleApi"; // Tambahkan ini
-
-export const setupApiRoutes = (app: Hono) => {
-  // API root endpoint
-  app.get("/api", (c) => {
-    return c.json({
-      message: "Hono API is running!",
-      // ... informasi lainnya
-    });
-  });
-
-  // Setup API routes
-  setupUserApiRoutes(app);
-  setupProductApiRoutes(app);
-  setupExampleApiRoutes(app); // Tambahkan ini
-};
-```
-
-## Mengakses API dari React Router
-
-### 1. Menambahkan Tipe untuk API Response
-
-```typescript
-// types/server.ts
-export interface Example {
-  id: number;
-  name: string;
-  description: string;
-}
-
-// ... tipe lainnya
-```
-
-### 2. Mengupdate getLoadContext di Server
-
-PENTING: Setelah membuat API, jangan lupa untuk menambahkannya ke `getLoadContext` agar bisa diakses oleh React Router loader:
-
-```typescript
-// app/server/index.ts
-import { ExampleModel } from "./models/exampleModel";
-import type { Example } from "types/server";
-
-declare module "react-router" {
-  interface AppLoadContext {
-    // ... context yang sudah ada
-    getAllExamples: () => Promise<Example[]>;
-    getExample: (id: number) => Promise<Example | null>;
-  }
-}
-
-export default await createHonoServer({
-  // ... konfigurasi lainnya
-
-  getLoadContext(c) {
-    return {
-      // ... context yang sudah ada
-
-      // Menambahkan akses ke API Examples
-      getAllExamples: async () => {
-        // Anda bisa mengakses langsung dari model (pilihan 1)
-        return ExampleModel.findAll();
-
-        // Atau melalui fetch API (pilihan 2)
-        // const baseUrl = new URL(c.req.url).origin;
-        // const response = await fetch(`${baseUrl}/api/examples`);
-        // return response.json();
-      },
-
-      getExample: async (id: number) => {
-        return ExampleModel.findById(id);
-      },
-    };
-  },
-});
-```
-
-### 3. Membuat Route React Router
-
-```typescript
-// app/routes/examples.tsx
-import { Link, useLoaderData } from "react-router";
-import type { Example } from "types/server";
-
-export async function loader({ context }) {
-  const examples = await context.getAllExamples();
-  return examples;
-}
-
-export default function Examples() {
-  const examples = useLoaderData<typeof loader>();
-
-  return (
-    <div>
-      <h1>Examples</h1>
-      <ul>
-        {examples.map((example) => (
-          <li key={example.id}>
-            <Link to={`/examples/${example.id}`}>{example.name}</Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-```
-
-## Deployment
-
-HonoStack mendukung deployment di berbagai platform:
-
-- **Node.js**: `bun build && bun run start`
-- **Bun**: `bun build && bun run start`
-- **Cloudflare Workers**: Menggunakan Wrangler (lihat `wrangler.toml` untuk konfigurasi)
-
-## Sumber dan Referensi
-
-- [React Router v7 Documentation](https://reactrouter.com/en/main)
-- [Hono Documentation](https://hono.dev/)
-- [react-router-hono-server](https://github.com/rphlmr/react-router-hono-server)
-- [Bun Documentation](https://bun.sh/docs)
+1. Implementasi Google OAuth
+2. Penambahan rate limiting untuk endpoints penting
 
 ## Kontribusi
 
-Kontribusi selalu diterima! Silakan buat issue atau pull request untuk memperbaiki atau menambahkan fitur.
+Kontribusi sangat dipersilakan. Silakan buka issue atau pull request jika Anda ingin berkontribusi.
 
 ## Lisensi
 
-ALL Brought to you by [rphlmr](https://github.com/rphlmr/react-router-hono-server) with love ❤️❤️❤️
+[MIT](LICENSE)
+
+---
+
+"Selamat Ber Kreasi dan Ber Fantasi - Salam dari EmeshDev"
