@@ -25,11 +25,9 @@ const registerSchema = z.object({
     ),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  agreeTerms: z
-    .boolean()
-    .refine((value) => value === true, {
-      message: "You must agree to the terms",
-    }),
+  agreeTerms: z.boolean().refine((value) => value === true, {
+    message: "You must agree to the terms",
+  }),
 });
 
 // Type for schema
@@ -71,7 +69,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   const password = formData.get("password") as string;
   const firstName = (formData.get("firstName") as string) || undefined;
   const lastName = (formData.get("lastName") as string) || undefined;
-  const agreeTerms = formData.get("agreeTerms") === "true";
+  // Fix: Convert 'on' value from checkbox to boolean
+  const agreeTerms = formData.get("agreeTerms") === "on";
 
   // Basic validation
   if (!email || !password || !agreeTerms) {
@@ -136,6 +135,7 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [isPasswordVisible, setIsPasswordVisible] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false); // Added state for form submission
 
   // React Hook Form setup
   const {
@@ -157,11 +157,15 @@ export default function Register() {
   });
 
   // Form validation handler
-  const validateForm = (event: React.FormEvent<HTMLFormElement>) => {
+  const validateForm = async (event: React.FormEvent<HTMLFormElement>) => {
+    // Set submitting state to true
+    setSubmitting(true);
+
     // Let react-hook-form handle validation
-    const isValid = trigger();
+    const isValid = await trigger();
     if (!isValid) {
       event.preventDefault();
+      setSubmitting(false);
     }
   };
 
@@ -351,7 +355,6 @@ export default function Register() {
                   {...register("agreeTerms")}
                   name="agreeTerms"
                   type="checkbox"
-                  value="true"
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
               </div>
@@ -379,10 +382,10 @@ export default function Register() {
             <div>
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={submitting}
                 className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-70"
               >
-                {isSubmitting ? "Creating account..." : "Create Account"}
+                {submitting ? "Creating account..." : "Create Account"}
               </button>
             </div>
 

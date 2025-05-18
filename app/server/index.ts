@@ -6,10 +6,10 @@ import { setupApiRoutes } from "./api-routes";
 import { UserModel } from "./models/userModel";
 import type { User2 } from "types/server";
 import type { AppVariables } from "./types";
-import type { User } from "~/db/schema";
+import type { Todo, User } from "~/db/schema";
 import { getCurrentUserController } from "./controllers/getCurrentUser.controller";
-import { AuthController } from "./controllers/authController";
-import type { Context } from "hono";
+import authContext from "./context/authContext";
+import createTodoContext from "./context/todoContext";
 
 // Definisi tipe untuk objek auth
 interface AuthInfo {
@@ -55,6 +55,64 @@ declare module "react-router" {
         errors?: Record<string, string[]>;
       }>;
     };
+    todoControllers: {
+      getTodos: (options?: {
+        status?: "all" | "active" | "completed";
+        search?: string;
+        sortBy?: "title" | "priority" | "dueDate" | "createdAt";
+        sortDirection?: "asc" | "desc";
+      }) => Promise<{
+        success: boolean;
+        todos?: Todo[];
+        message?: string;
+        errors?: Record<string, string[]>;
+      }>;
+      getTodo: (id: number) => Promise<{
+        success: boolean;
+        todo?: Todo;
+        message?: string;
+      }>;
+      createTodo: (data: {
+        title: string;
+        description?: string;
+        priority?: number;
+        dueDate?: string;
+      }) => Promise<{
+        success: boolean;
+        todo?: Todo;
+        message?: string;
+        errors?: Record<string, string[]>;
+      }>;
+      updateTodo: (
+        id: number,
+        data: {
+          title?: string;
+          description?: string;
+          completed?: boolean;
+          priority?: number;
+          dueDate?: string | null;
+        }
+      ) => Promise<{
+        success: boolean;
+        todo?: Todo;
+        message?: string;
+        errors?: Record<string, string[]>;
+      }>;
+      toggleTodo: (id: number) => Promise<{
+        success: boolean;
+        todo?: Todo;
+        message?: string;
+      }>;
+      deleteTodo: (id: number) => Promise<{
+        success: boolean;
+        message?: string;
+      }>;
+      clearCompletedTodos: () => Promise<{
+        success: boolean;
+        count?: number;
+        message?: string;
+      }>;
+    };
   }
 }
 
@@ -85,46 +143,6 @@ export default await createHonoServer({
       isAuthenticated: !!user,
     };
 
-    // Adapter functions for controllers to make them more usable in React Router
-    const authControllers = {
-      register: async (userData: {
-        email: string;
-        password: string;
-        firstName?: string;
-        lastName?: string;
-      }) => {
-        // Create a mock context with the user data
-        const mockContext = {
-          req: {
-            json: async () => userData,
-          },
-        } as unknown as Context;
-
-        return await AuthController.register(mockContext);
-      },
-
-      verifyEmail: async (token: string) => {
-        // Create a mock context with the token
-        const mockContext = {
-          req: {
-            query: (name: string) => (name === "token" ? token : null),
-          },
-        } as unknown as Context;
-
-        return await AuthController.verifyEmail(mockContext);
-      },
-
-      resendVerification: async (email: string) => {
-        // Create a mock context with the email
-        const mockContext = {
-          req: {
-            json: async () => ({ email }),
-          },
-        } as unknown as Context;
-
-        return await AuthController.resendVerification(mockContext);
-      },
-    };
     return {
       serverInfo: {
         version: "1.0.0",
@@ -152,7 +170,8 @@ export default await createHonoServer({
       auth: authInfo,
 
       // Auth Controllers
-      authControllers,
+      authControllers: authContext,
+      todoControllers: createTodoContext(c),
     };
   },
 });
