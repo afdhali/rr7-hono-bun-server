@@ -4,6 +4,7 @@ import type { Hono } from "hono";
 import { setupUserApiRoutes } from "./userApi";
 import { setupProductApiRoutes } from "./productApi";
 import { setupAuthApiRoutes } from "./authApi";
+import { setupTodoApiRoutes } from "./todoApi";
 
 export const setupApiRoutes = (app: Hono) => {
   // API root endpoint
@@ -36,4 +37,7 @@ export const setupApiRoutes = (app: Hono) => {
 
   // Setup Product API routes
   setupProductApiRoutes(app);
+
+  // Setup Todos API Routes
+  setupTodoApiRoutes(app);
 };

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "~/db";
 import { users, emailVerifications, type User } from "~/db/schema";
 import { EmailService } from "../services/email.service";
+import { createZodErrorResponse } from "../utils/zodErrors";
 
 // Validation schema for registration
 const registerSchema = z.object({
@@ -43,31 +44,7 @@ export class AuthController {
       const validationResult = registerSchema.safeParse(body);
 
       if (!validationResult.success) {
-        const formattedErrors = validationResult.error.format();
-
-        // Format errors for API response
-        const errors: Record<string, string[]> = {};
-
-        // Fix for TypeScript error - properly handle the error format
-        Object.entries(formattedErrors).forEach(([key, value]) => {
-          if (
-            key !== "_errors" &&
-            typeof value === "object" &&
-            value !== null &&
-            "_errors" in value
-          ) {
-            const errorMessages = (value as { _errors: string[] })._errors;
-            if (errorMessages.length > 0) {
-              errors[key] = errorMessages;
-            }
-          }
-        });
-
-        return {
-          success: false,
-          message: "Validation Failed",
-          errors,
-        };
+        return createZodErrorResponse(validationResult.error);
       }
 
       const validatedData = validationResult.data;

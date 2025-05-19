@@ -242,31 +242,7 @@ export class TodoController {
       const validationResult = createTodoSchema.safeParse(body);
 
       if (!validationResult.success) {
-        console.error("Validation failed:", validationResult.error.format());
-
-        // Extract and format validation errors
-        const formattedErrors: Record<string, string[]> = {};
-        const formattedError = validationResult.error.format();
-
-        Object.entries(formattedError).forEach(([key, value]) => {
-          if (
-            key !== "_errors" &&
-            typeof value === "object" &&
-            value !== null &&
-            "_errors" in value
-          ) {
-            const errors = (value as any)._errors;
-            if (Array.isArray(errors) && errors.length > 0) {
-              formattedErrors[key] = errors;
-            }
-          }
-        });
-
-        return {
-          success: false,
-          message: "Validation failed",
-          errors: formattedErrors,
-        };
+        return createZodErrorResponse(validationResult.error);
       }
 
       const validatedData = validationResult.data;
