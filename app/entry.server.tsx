@@ -13,6 +13,7 @@ import {
 import { Provider } from "react-redux";
 import { syncServerAuth } from "./store/authSlice";
 import { getRoutePrefetchConfig } from "./utils/routeUtils";
+import { isProtectedRoute } from "./utils/routeAuth";
 
 export default async function handleRequest(
   request: Request,
@@ -60,8 +61,9 @@ export default async function handleRequest(
     },
   };
 
-  // IMPROVEMENT 3: Check AUTH Status on Server Side - Best thing about react-router-hono-server
-  if (url.pathname.startsWith("/about")) {
+  // IMPROVEMENT 3: Check AUTH Status on Server Side - UPDATED to use routeAuth
+  // Sekarang menggunakan isProtectedRoute dari routeAuth.ts
+  if (isProtectedRoute(url.pathname)) {
     try {
       const cookies = request.headers.get("Cookie") || "";
       const hasAuthCookie =
@@ -69,7 +71,9 @@ export default async function handleRequest(
         cookies.includes("auth_status=authenticated");
 
       if (hasAuthCookie) {
-        console.log("[Server] Checking authentication for /about route");
+        console.log(
+          `[Server] Checking authentication for protected route: ${url.pathname}`
+        );
         try {
           const isAuthenticated = await _loadContext.isAuthenticated();
 
@@ -102,11 +106,11 @@ export default async function handleRequest(
     }
   }
 
-  // Pre-fetch data for certain routes
+  // Pre-fetch data for certain routes - TETAP MENGGUNAKAN routeUtils.ts
   try {
     console.log(`[Server] Analyzing route for prefetch: ${url.pathname}`);
 
-    // Get prefetch configuration for this route
+    // Get prefetch configuration for this route - MENGGUNAKAN FUNGSI DARI routeUtils.ts
     const prefetchConfig = getRoutePrefetchConfig(url.pathname);
 
     // Check if we should prefetch for this route

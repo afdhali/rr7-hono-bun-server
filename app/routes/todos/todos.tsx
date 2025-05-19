@@ -1,7 +1,7 @@
 // app/routes/about/todos.tsx
 import { useState } from "react";
 import { useLoaderData, useFetcher, Form, redirect } from "react-router";
-import type { Route } from "./+types/todos";
+import type { Route } from "./+types/layout";
 
 // Tipe untuk Todo
 type Todo = {

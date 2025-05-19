@@ -9,12 +9,12 @@ import {
 } from "react-router";
 import Navbar from "~/components/Navbar";
 
-import type { Route } from "./+types/layout";
 import { useAuth } from "~/providers/authProviders";
 import {
   createClientAuthLoader,
   type AuthLoaderData,
 } from "~/utils/authLoaders";
+import type { Route } from "./+types/layout";
 
 // Type for loader data
 export type LayoutLoaderData = AuthLoaderData;
@@ -64,7 +64,7 @@ export async function clientLoader({
   serverLoader,
 }: Route.ClientLoaderArgs) {
   // Gunakan createClientAuthLoader untuk menyederhanakan kode
-  return createClientAuthLoader("AboutLayout", async () => {
+  return createClientAuthLoader("TodosLayout", async () => {
     // Type cast serverLoader result
     return (await serverLoader()) as AuthLoaderData;
   });

@@ -1,5 +1,12 @@
-// hooks/useAuth.ts
-import { useCallback, useEffect, useRef, useState } from "react";
+// app/providers/AuthProviders.tsx
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router";
 import { useDispatch, useSelector } from "react-redux";
 import { useRouteLoaderData, useRevalidator } from "react-router";
@@ -21,8 +28,44 @@ import {
   selectLogoutInProgress,
   setLogoutInProgress,
 } from "~/store/authSlice";
+import type { User } from "~/db/schema";
 
-export function useAuth(options = { autoFetch: true }) {
+// Tipe untuk refresh status
+interface RefreshStatus {
+  lastAttempt: Date | null;
+  lastSuccess: Date | null;
+  errors: number;
+  inProgress: boolean;
+}
+
+// Tipe untuk context value
+interface AuthContextValue {
+  user: Omit<User, "passwordHash"> | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  logout: () => Promise<void>;
+  refetchUser: () => Promise<any>;
+  syncAuth: () => void;
+  refreshToken: () => Promise<{
+    success: boolean;
+    expiresAt?: string;
+    reason?: string;
+    error?: any;
+  }>;
+  authSource: "server" | "client" | null;
+  expiresAt: string | null;
+  isLoggingOut: boolean;
+  isRedirecting: boolean;
+  refreshStatus: RefreshStatus;
+}
+
+// Create context dengan nilai default
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+// Provider component untuk Auth
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const revalidator = useRevalidator();
@@ -59,9 +102,8 @@ export function useAuth(options = { autoFetch: true }) {
     isLoading: meLoading,
     refetch: refetchMe,
   } = useMeQuery(undefined, {
-    // Skip if we already have auth data or not autoFetch
+    // Skip if we already have auth data
     skip:
-      !options.autoFetch ||
       isAuthenticated ||
       !hasAuthCookie() ||
       isLoggingOut ||
@@ -76,12 +118,14 @@ export function useAuth(options = { autoFetch: true }) {
   // Log refresh errors
   useEffect(() => {
     if (refreshResult.isError) {
-      console.error("[useAuth] Refresh error:", refreshResult.error);
+      console.error("[AuthProvider] Refresh error:", refreshResult.error);
       setRefreshErrors((prev) => prev + 1);
 
       // If 401 unauthorized, clear credentials
       if (refreshResult.error) {
-        console.log("[useAuth] 401 Unauthorized refresh, clearing credentials");
+        console.log(
+          "[AuthProvider] 401 Unauthorized refresh, clearing credentials"
+        );
         dispatch(clearCredentials());
       }
     }
@@ -96,7 +140,7 @@ export function useAuth(options = { autoFetch: true }) {
 
     // Skip if no auth cookie
     if (!hasAuthCookie()) {
-      console.log("[useAuth] No auth cookie, skipping refresh check");
+      console.log("[AuthProvider] No auth cookie, skipping refresh check");
       return false;
     }
 
@@ -126,7 +170,9 @@ export function useAuth(options = { autoFetch: true }) {
 
     if (process.env.NODE_ENV === "development") {
       console.log(
-        `[useAuth] Token expires in ${Math.floor(timeUntilExpiry / 1000)}s, ` +
+        `[AuthProvider] Token expires in ${Math.floor(
+          timeUntilExpiry / 1000
+        )}s, ` +
           `canRefresh=${canRefreshAgain}, shouldRefresh=${
             timeUntilExpiry < refreshThreshold
           }`
@@ -175,7 +221,7 @@ export function useAuth(options = { autoFetch: true }) {
       // If auth cookie exists but we have no user, try to fetch
       if (hasAuthCookieNow && !isAuthenticated && !isLoading && !meLoading) {
         console.log(
-          "[useAuth] Auth cookie exists but no user in state, fetching user data"
+          "[AuthProvider] Auth cookie exists but no user in state, fetching user data"
         );
 
         // Use setTimeout to avoid nested dispatch
@@ -189,7 +235,7 @@ export function useAuth(options = { autoFetch: true }) {
             !refreshInProgressRef.current
           ) {
             refetchMe().catch((err) => {
-              console.error("[useAuth] Error fetching user data:", err);
+              console.error("[AuthProvider] Error fetching user data:", err);
             });
           }
         }, 0);
@@ -198,7 +244,7 @@ export function useAuth(options = { autoFetch: true }) {
       // If auth cookie is gone but we still have user data, clear it
       if (!hasAuthCookieNow && isAuthenticated) {
         console.log(
-          "[useAuth] Auth cookie gone but user still in state, clearing credentials"
+          "[AuthProvider] Auth cookie gone but user still in state, clearing credentials"
         );
 
         // Use setTimeout to avoid nested dispatch
@@ -236,7 +282,7 @@ export function useAuth(options = { autoFetch: true }) {
       !logoutInProgress &&
       !redirectInProgressRef.current
     ) {
-      console.log("[useAuth] Syncing server auth data to Redux store");
+      console.log("[AuthProvider] Syncing server auth data to Redux store");
       dispatch(
         syncServerAuth({
           user: serverAuth.user,
@@ -254,25 +300,6 @@ export function useAuth(options = { autoFetch: true }) {
     logoutInProgress,
   ]);
 
-  // Auto-fetch from client API if we have auth cookie but no user
-  useEffect(() => {
-    if (
-      options.autoFetch &&
-      !isAuthenticated &&
-      !isLoading &&
-      !meLoading &&
-      hasAuthCookie() &&
-      !refreshInProgressRef.current
-    ) {
-      console.log(
-        "[useAuth] Auth cookie found but no user in state, fetching from API"
-      );
-      refetchMe().catch((err) => {
-        console.error("[useAuth] Error fetching user data:", err);
-      });
-    }
-  }, [options.autoFetch, isAuthenticated, isLoading, meLoading, refetchMe]);
-
   // CONSOLIDATED TOKEN REFRESH EFFECT - This is the main refresh mechanism
   useEffect(() => {
     // Skip if not authenticated or in logout/redirect process
@@ -286,7 +313,7 @@ export function useAuth(options = { autoFetch: true }) {
     )
       return;
 
-    console.log("[useAuth] Setting up token refresh interval");
+    console.log("[AuthProvider] Setting up token refresh interval");
 
     // Check token expiry every 30 seconds
     const checkInterval = setInterval(async () => {
@@ -303,7 +330,7 @@ export function useAuth(options = { autoFetch: true }) {
         return;
 
       if (shouldRefreshToken()) {
-        console.log("[useAuth] Token needs refresh, initiating refresh");
+        console.log("[AuthProvider] Token needs refresh, initiating refresh");
 
         // Prevent multiple refresh calls
         refreshInProgressRef.current = true;
@@ -323,7 +350,7 @@ export function useAuth(options = { autoFetch: true }) {
             result.success
           ) {
             console.log(
-              "[useAuth] Auto refresh successful, new expiry:",
+              "[AuthProvider] Auto refresh successful, new expiry:",
               new Date(result.expiresAt).toLocaleString()
             );
 
@@ -342,12 +369,12 @@ export function useAuth(options = { autoFetch: true }) {
             revalidator.revalidate();
           }
         } catch (err) {
-          console.error("[useAuth] Auto refresh error:", err);
+          console.error("[AuthProvider] Auto refresh error:", err);
 
           // Check if this is a 401 unauthorized
           if (err) {
             console.log(
-              "[useAuth] 401 Unauthorized in auto refresh, clearing credentials"
+              "[AuthProvider] 401 Unauthorized in auto refresh, clearing credentials"
             );
             dispatch(clearCredentials());
           }
@@ -360,13 +387,15 @@ export function useAuth(options = { autoFetch: true }) {
         const expTime = new Date(expiresAt).getTime();
         const timeLeft = Math.max(0, expTime - Date.now());
         console.log(
-          `[useAuth] Token check: ${Math.floor(timeLeft / 1000)}s remaining`
+          `[AuthProvider] Token check: ${Math.floor(
+            timeLeft / 1000
+          )}s remaining`
         );
       }
     }, 30000); // Check every 30 seconds
 
     return () => {
-      console.log("[useAuth] Clearing refresh interval");
+      console.log("[AuthProvider] Clearing refresh interval");
       clearInterval(checkInterval);
     };
   }, [
@@ -385,7 +414,7 @@ export function useAuth(options = { autoFetch: true }) {
   // COMPLETELY REVISED logout handler
   const handleLogout = useCallback(async () => {
     try {
-      console.log("[useAuth] Starting logout process");
+      console.log("[AuthProvider] Starting logout process");
 
       // Set all flags to prevent any further auth operations
       redirectInProgressRef.current = true;
@@ -395,28 +424,28 @@ export function useAuth(options = { autoFetch: true }) {
       dispatch(setLogoutInProgress(true));
 
       // 1. Clear Redux state first
-      console.log("[useAuth] 1. Clearing Redux state");
+      console.log("[AuthProvider] 1. Clearing Redux state");
       dispatch(clearCredentials());
 
       // 2. Call logout API
-      console.log("[useAuth] 2. Calling logout API");
+      console.log("[AuthProvider] 2. Calling logout API");
       try {
         await logout().unwrap();
-        console.log("[useAuth] Logout API called successfully");
+        console.log("[AuthProvider] Logout API called successfully");
       } catch (logoutError) {
-        console.error("[useAuth] Logout API error:", logoutError);
+        console.error("[AuthProvider] Logout API error:", logoutError);
         // Continue with redirect even if API fails
       }
 
       // 3. Final redirect with small delay to allow state updates
-      console.log("[useAuth] 3. Preparing to redirect to login page");
+      console.log("[AuthProvider] 3. Preparing to redirect to login page");
       setTimeout(() => {
         // 4. Final redirect
-        console.log("[useAuth] 4. Redirecting to login page");
+        console.log("[AuthProvider] 4. Redirecting to login page");
         window.location.href = "/login";
       }, 100);
     } catch (error) {
-      console.error("[useAuth] Unexpected error during logout:", error);
+      console.error("[AuthProvider] Unexpected error during logout:", error);
       // Ensure we still redirect in case of error
       window.location.href = "/login";
     }
@@ -432,7 +461,7 @@ export function useAuth(options = { autoFetch: true }) {
       !refreshInProgressRef.current
     ) {
       refetchMe().catch((err) =>
-        console.error("[useAuth] Error in syncAuth:", err)
+        console.error("[AuthProvider] Error in syncAuth:", err)
       );
       revalidator.revalidate();
     }
@@ -452,20 +481,22 @@ export function useAuth(options = { autoFetch: true }) {
 
     // Skip if no auth cookie
     if (!hasAuthCookie()) {
-      console.log("[useAuth] No auth cookie found, skipping manual refresh");
+      console.log(
+        "[AuthProvider] No auth cookie found, skipping manual refresh"
+      );
       return { success: false, reason: "No auth cookie present" };
     }
 
     // Skip if refresh already in progress
     if (refreshInProgressRef.current) {
       console.log(
-        "[useAuth] Refresh already in progress, skipping manual refresh"
+        "[AuthProvider] Refresh already in progress, skipping manual refresh"
       );
       return { success: false, reason: "Refresh already in progress" };
     }
 
     try {
-      console.log("[useAuth] Manual refresh token requested");
+      console.log("[AuthProvider] Manual refresh token requested");
       refreshInProgressRef.current = true;
       setLastRefreshAttempt(new Date());
 
@@ -486,7 +517,7 @@ export function useAuth(options = { autoFetch: true }) {
 
       if (result.success) {
         console.log(
-          "[useAuth] Manual refresh successful, new expiry:",
+          "[AuthProvider] Manual refresh successful, new expiry:",
           new Date(result.expiresAt).toLocaleString()
         );
 
@@ -504,16 +535,18 @@ export function useAuth(options = { autoFetch: true }) {
         revalidator.revalidate();
         return { success: true, expiresAt: result.expiresAt };
       } else {
-        console.error("[useAuth] Manual refresh failed with success=false");
+        console.error(
+          "[AuthProvider] Manual refresh failed with success=false"
+        );
         return { success: false, reason: "Server returned success=false" };
       }
     } catch (error) {
-      console.error("[useAuth] Manual refresh error:", error);
+      console.error("[AuthProvider] Manual refresh error:", error);
 
       // If 401, clear credentials
       if (error) {
         console.log(
-          "[useAuth] 401 Unauthorized in manual refresh, clearing credentials"
+          "[AuthProvider] 401 Unauthorized in manual refresh, clearing credentials"
         );
         dispatch(clearCredentials());
       }
@@ -532,7 +565,8 @@ export function useAuth(options = { autoFetch: true }) {
     logoutInProgress,
   ]);
 
-  return {
+  // Buat value untuk context
+  const contextValue: AuthContextValue = {
     user,
     isAuthenticated,
     isLoading:
@@ -556,4 +590,20 @@ export function useAuth(options = { autoFetch: true }) {
       inProgress: refreshInProgressRef.current,
     },
   };
-}
+
+  return (
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+  );
+};
+
+// Custom hook untuk menggunakan AuthContext
+export const useAuth = (): AuthContextValue => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
+
+// Export provider untuk digunakan di root aplikasi
+export default AuthProvider;

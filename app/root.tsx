@@ -12,6 +12,7 @@ import "./app.css";
 import { Provider } from "react-redux";
 import { store } from "./store";
 import React, { Suspense } from "react";
+import AuthProvider from "./providers/authProviders";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -107,12 +108,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Provider store={store}>
-      {/* Wrap the entire app with Suspense and ErrorBoundary */}
-      <SuspenseErrorBoundary>
-        <Suspense fallback={<RootFallback />}>
-          <Outlet />
-        </Suspense>
-      </SuspenseErrorBoundary>
+      <AuthProvider>
+        {/* Wrap the entire app with Suspense and ErrorBoundary */}
+        <SuspenseErrorBoundary>
+          <Suspense fallback={<RootFallback />}>
+            <Outlet />
+          </Suspense>
+        </SuspenseErrorBoundary>
+      </AuthProvider>
     </Provider>
   );
 }

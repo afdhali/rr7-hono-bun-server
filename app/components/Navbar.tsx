@@ -1,6 +1,7 @@
 // components/Navbar.tsx - Ultra Safe Version
 import React from "react";
 import { Link, useLocation } from "react-router";
+import NavLink from "./NavLink"; // Import komponen NavLink yang baru
 import type { User } from "~/db/schema";
 
 type NavbarProps = {
@@ -68,26 +69,19 @@ export default function Navbar({
               </Link>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <Link
-                to="/"
-                className={`inline-flex items-center px-1 pt-1 text-sm font-medium ${
-                  location.pathname === "/"
-                    ? "border-b-2 border-indigo-500 text-gray-900"
-                    : "border-b-2 border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
+              {/* Menggunakan NavLink dengan exact untuk Home */}
+              <NavLink to="/" exact>
                 Home
-              </Link>
-              <Link
-                to="/about"
-                className={`inline-flex items-center px-1 pt-1 text-sm font-medium ${
-                  location.pathname === "/about"
-                    ? "border-b-2 border-indigo-500 text-gray-900"
-                    : "border-b-2 border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                About (Protected)
-              </Link>
+              </NavLink>
+
+              {/* Menggunakan NavLink untuk About */}
+              <NavLink to="/about">About (Protected)</NavLink>
+
+              {/* Menggunakan NavLink untuk Todos */}
+              <NavLink to="/todos">Todos (Protected)</NavLink>
+
+              {/* Menggunakan NavLink untuk Dashboard */}
+              <NavLink to="/dashboard">Dashboard</NavLink>
             </div>
           </div>
 
@@ -120,7 +114,7 @@ export default function Navbar({
           {/* Mobile menu button */}
           <div className="flex items-center sm:hidden">
             <Link
-              to={isAuthenticated ? "/about" : "/login"}
+              to={isAuthenticated ? "/profile" : "/login"}
               className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white"
             >
               {isAuthenticated ? "Account" : "Login"}

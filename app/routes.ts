@@ -8,7 +8,15 @@ export default [
     {
       id: "aboutLayout",
     },
-    [index("routes/about/index.tsx"), route("todos", "routes/about/todos.tsx")]
+    [index("routes/about/index.tsx")]
+  ),
+  route(
+    "todos",
+    "routes/todos/layout.tsx",
+    {
+      id: "TodosLayout",
+    },
+    [index("routes/todos/todos.tsx")]
   ),
   route("users", "routes/users.tsx"),
   route("users/:id", "routes/user.tsx"),
