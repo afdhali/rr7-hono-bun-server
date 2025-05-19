@@ -1,4 +1,4 @@
-// app/server/utils/cookie.ts
+// Pembaruan app/server/utils/cookie.ts
 import type { Context } from "hono";
 import {
   getCookie,
@@ -56,4 +56,43 @@ export const deleteAuthCookie = (
   options?: Parameters<typeof deleteCookie>[2]
 ): void => {
   deleteCookie(c, name, options);
+};
+
+// Helper untuk setting auth cookies dengan signed cookies - now async
+export const setAuthCookies = async (
+  c: Context,
+  {
+    accessToken,
+    refreshToken,
+    accessTokenExpiresIn,
+    refreshTokenExpiresIn,
+  }: {
+    accessToken: string;
+    refreshToken: string;
+    accessTokenExpiresIn: number;
+    refreshTokenExpiresIn: number;
+  }
+) => {
+  // Set access token with signed cookie
+  await setAuthSignedCookie(c, "access_token", accessToken, {
+    ...getCookieOptions(),
+    maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
+  });
+
+  // Set refresh token with signed cookie
+  await setAuthSignedCookie(c, "refresh_token", refreshToken, {
+    ...getCookieOptions(),
+    maxAge: Math.floor((refreshTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
+  });
+};
+
+// Helper for clearing auth cookies
+export const clearAuthCookies = (c: Context) => {
+  deleteAuthCookie(c, "access_token", {
+    ...getCookieOptions(),
+  });
+
+  deleteAuthCookie(c, "refresh_token", {
+    ...getCookieOptions(),
+  });
 };

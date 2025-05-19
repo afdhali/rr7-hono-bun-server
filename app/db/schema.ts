@@ -14,6 +14,14 @@ import { relations } from "drizzle-orm";
 // Enum untuk role tidak berubah
 export const roleEnum = pgEnum("role", ["super_admin", "admin", "user"]);
 
+// Enum untuk provider OAuth
+export const oauthProviderEnum = pgEnum("oauth_provider", [
+  "google",
+  "facebook",
+  "github",
+  "twitter",
+]);
+
 // Tabel users dengan id serial, ditambah kolom verifikasi email
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -56,6 +64,22 @@ export const emailVerifications = pgTable("email_verifications", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Tabel baru untuk oauth accounts
+export const oauthAccounts = pgTable("oauth_accounts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  provider: oauthProviderEnum("provider").notNull(),
+  providerId: varchar("provider_id", { length: 255 }).notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  expiresAt: timestamp("expires_at"),
+  profile: text("profile"), // JSON stringified profile data
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const todos = pgTable("todos", {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
@@ -74,6 +98,7 @@ export const todos = pgTable("todos", {
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   emailVerifications: many(emailVerifications),
+  oauthAccounts: many(oauthAccounts),
   todos: many(todos),
 }));
 
@@ -94,6 +119,13 @@ export const emailVerificationsRelations = relations(
   })
 );
 
+export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
+  user: one(users, {
+    fields: [oauthAccounts.userId],
+    references: [users.id],
+  }),
+}));
+
 export const todosRelations = relations(todos, ({ one }) => ({
   user: one(users, {
     fields: [todos.userId],
@@ -108,5 +140,7 @@ export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type NewRefreshToken = typeof refreshTokens.$inferInsert;
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 export type NewEmailVerification = typeof emailVerifications.$inferInsert;
+export type OAuthAccount = typeof oauthAccounts.$inferSelect;
+export type NewOAuthAccount = typeof oauthAccounts.$inferInsert;
 export type Todo = typeof todos.$inferSelect;
 export type NewTodo = typeof todos.$inferInsert;

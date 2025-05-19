@@ -4,7 +4,7 @@
     "": {
       "name": "honostack",
       "dependencies": {
-        "@hono/oauth-providers": "^0.7.1",
+        "@hono/oauth-providers": "^0.8.0",
         "@hono/zod-validator": "^0.5.0",
         "@hookform/resolvers": "^5.0.1",
         "@neondatabase/serverless": "^1.0.0",
@@ -164,7 +164,7 @@
 
     "@hono/node-ws": ["@hono/node-ws@1.1.4", "", { "dependencies": { "ws": "^8.17.0" }, "peerDependencies": { "@hono/node-server": "^1.11.1", "hono": "^4.6.0" } }, "sha512-eS/L5+xIgz5/FJOv1fiSIf5rCBO4rnVqEEqNKGN7CiA52tsdTSETDOQD6BuTDr+r5sbhdp0OuJXvMpEWOsAtXA=="],
 
-    "@hono/oauth-providers": ["@hono/oauth-providers@0.7.1", "", { "peerDependencies": { "hono": ">=3.*" } }, "sha512-NJ9weiJ5Af+/Waq0q/DIMofxkKlK32pVl7/iXh/Q0dumRKftn1A41h3d5clsNtwNsKfADErtshbdD1Q89/bFag=="],
+    "@hono/oauth-providers": ["@hono/oauth-providers@0.8.0", "", { "peerDependencies": { "hono": ">=3.*" } }, "sha512-FGpx4NUMWEs0lre9NqBXahgK6AsoRCq8683b7ahHV0evHUIj5y/f7M1muGOoI3fn4xHkYI2a25I0i6uL/R1ktw=="],
 
     "@hono/vite-dev-server": ["@hono/vite-dev-server@0.19.0", "", { "dependencies": { "@hono/node-server": "^1.12.0", "minimatch": "^9.0.3" }, "peerDependencies": { "hono": "*", "miniflare": "*", "wrangler": "*" }, "optionalPeers": ["miniflare", "wrangler"] }, "sha512-myMc4Nm0nFQSPaeE6I/a1ODyDR5KpQ4EHodX4Tu/7qlB31GfUemhUH/WsO91HJjDEpRRpsT4Zbg+PleMlpTljw=="],
 

@@ -12,7 +12,7 @@
     "db:migrate": "npx drizzle-kit migrate"
   },
   "dependencies": {
-    "@hono/oauth-providers": "^0.7.1",
+    "@hono/oauth-providers": "^0.8.0",
     "@hono/zod-validator": "^0.5.0",
     "@hookform/resolvers": "^5.0.1",
     "@neondatabase/serverless": "^1.0.0",

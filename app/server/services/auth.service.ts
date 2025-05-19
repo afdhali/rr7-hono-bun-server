@@ -115,6 +115,90 @@ export class AuthService {
     };
   }
 
+  /**
+   * Metode untuk membuat token untuk user yang sudah terautentikasi (misalnya via OAuth)
+   * Metode ini mirip dengan login tetapi tidak melakukan verifikasi password
+   */
+  static async createTokensForUser(
+    user: User,
+    metadata: {
+      userAgent?: string;
+      ipAddress?: string;
+      family?: string;
+    } = {}
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    accessTokenExpiresIn: number;
+    refreshTokenExpiresIn: number;
+  }> {
+    // Generate fingerprint untuk token binding
+    const fingerprint = {
+      userAgent: metadata.userAgent || "",
+      ipAddress: metadata.ipAddress || "",
+      family: metadata.family || "",
+    };
+
+    // Generate JWT tokens dengan fingerprint
+    const { token: accessToken, expiresIn: accessTokenExpiresIn } =
+      JwtService.generateAccessToken(user, fingerprint);
+    const {
+      token: refreshToken,
+      expiresIn: refreshTokenExpiresIn,
+      jti,
+    } = JwtService.generateRefreshToken(user);
+
+    // Save refresh token di database
+    const expiresAt = new Date(refreshTokenExpiresIn);
+
+    await db.insert(refreshTokens).values({
+      userId: user.id,
+      token: refreshToken,
+      expiresAt,
+      userAgent: metadata.userAgent,
+      ipAddress: metadata.ipAddress,
+      family: metadata.family,
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      accessTokenExpiresIn,
+      refreshTokenExpiresIn,
+    };
+  }
+
+  static async getUserFromRefreshToken(token: string): Promise<User | null> {
+    // Verify refresh token
+    const payload = JwtService.verifyRefreshToken(token);
+
+    if (!payload) {
+      return null;
+    }
+
+    const userId = parseInt(payload.sub);
+
+    // Cek apakah token ada di database dan belum direvoke
+    const storedToken = await db.query.refreshTokens.findFirst({
+      where: and(
+        eq(refreshTokens.token, token),
+        eq(refreshTokens.isRevoked, false),
+        gt(refreshTokens.expiresAt, new Date())
+      ),
+    });
+
+    if (!storedToken) {
+      return null;
+    }
+
+    // Get user data
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    return user || null;
+  }
+
   // Method untuk refresh token - tidak berubah
   static async refreshToken(token: string): Promise<{
     accessToken: string;

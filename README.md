@@ -22,7 +22,7 @@ Repository ini berisi implementasi template full-stack menggunakan React Router 
   - sistem role-based access control (RBAC)
   - Manajemen session
 
-- **Google OAuth** - Segera Hadir
+- **Google OAuth** - DONE --- Menggunakan @hono/oauth-providers library adapter
 
 - **Pre-fetching Data**:
 
@@ -263,8 +263,7 @@ app/
 
 Beberapa ide untuk pengembangan selanjutnya:
 
-1. Implementasi Google OAuth
-2. Penambahan rate limiting untuk endpoints penting
+1. Penambahan rate limiting untuk endpoints penting
 
 ## Kontribusi
 

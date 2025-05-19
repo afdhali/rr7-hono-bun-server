@@ -1,4 +1,4 @@
-// app/server/api-routes/authApi.ts
+// app/server/api-routes/authApi.ts (Updated)
 import type { Hono, Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
@@ -8,14 +8,15 @@ import { AuthService } from "../services/auth.service";
 import { requireAuth } from "../middlewares/authMiddleware";
 import {
   getCookieOptions,
-  setAuthSignedCookie,
+  setAuthCookies,
   getAuthSignedCookie,
-  deleteAuthCookie,
+  clearAuthCookies,
 } from "../utils/cookie";
-import { deleteCookie, setCookie } from "hono/cookie";
+import { setCookie, deleteCookie } from "hono/cookie";
 import { db } from "~/db";
 import { users } from "~/db/schema";
 import { AuthController } from "../controllers/authController";
+import { OAuthService } from "../services/oauth.service";
 
 // Define schemas separately
 const loginSchema = z.object({
@@ -42,45 +43,6 @@ const registerSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
 });
-
-// Helper for setting auth cookies with signed cookies - now async
-const setAuthCookies = async (
-  c: Context,
-  {
-    accessToken,
-    refreshToken,
-    accessTokenExpiresIn,
-    refreshTokenExpiresIn,
-  }: {
-    accessToken: string;
-    refreshToken: string;
-    accessTokenExpiresIn: number;
-    refreshTokenExpiresIn: number;
-  }
-) => {
-  // Set access token with signed cookie
-  await setAuthSignedCookie(c, "access_token", accessToken, {
-    ...getCookieOptions(),
-    maxAge: Math.floor((accessTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
-  });
-
-  // Set refresh token with signed cookie
-  await setAuthSignedCookie(c, "refresh_token", refreshToken, {
-    ...getCookieOptions(),
-    maxAge: Math.floor((refreshTokenExpiresIn - Date.now()) / 1000), // Convert to seconds
-  });
-};
-
-// Helper for clearing auth cookies
-const clearAuthCookies = (c: Context) => {
-  deleteAuthCookie(c, "access_token", {
-    ...getCookieOptions(),
-  });
-
-  deleteAuthCookie(c, "refresh_token", {
-    ...getCookieOptions(),
-  });
-};
 
 export const setupAuthApiRoutes = (app: Hono) => {
   // Login route
@@ -340,48 +302,77 @@ export const setupAuthApiRoutes = (app: Hono) => {
 
   // Updated logout route
   app.post("/api/auth/logout", async (c) => {
-    const refreshToken = await getAuthSignedCookie(c, "refresh_token");
+    try {
+      const refreshToken = await getAuthSignedCookie(c, "refresh_token");
+      let userId: number | null = null;
 
-    if (refreshToken !== false) {
-      // Revoke refresh token
-      await AuthService.revokeRefreshToken(refreshToken);
+      if (refreshToken !== false) {
+        // Get the user ID from the refresh token if possible
+        try {
+          const userData = await AuthService.getUserFromRefreshToken(
+            refreshToken
+          );
+          if (userData) {
+            userId = userData.id;
+          }
+        } catch (tokenError) {
+          console.error("Failed to get user from token:", tokenError);
+        }
+
+        // Revoke refresh token
+        await AuthService.revokeRefreshToken(refreshToken);
+      }
+
+      // Revoke OAuth tokens if we have a userId
+      if (userId) {
+        await OAuthService.revokeOAuthTokens(userId);
+      }
+
+      // Clear cookies
+      clearAuthCookies(c);
+
+      // Clear auth_status cookie
+      deleteCookie(c, "auth_status", {
+        ...getCookieOptions(),
+        httpOnly: false,
+      });
+
+      // Clear all client-side data
+      c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
+
+      return c.json({ success: true });
+    } catch (error) {
+      return c.json({ success: false });
     }
-
-    // Clear cookies
-    clearAuthCookies(c);
-
-    // Clear auth_status cookie
-    deleteCookie(c, "auth_status", {
-      ...getCookieOptions(),
-      httpOnly: false,
-    });
-
-    // Clear all client-side data
-    c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
-
-    return c.json({ success: true });
   });
 
   // Logout from all devices
   app.post("/api/auth/logout-all", requireAuth, async (c) => {
-    const user = c.var.user!; // Non-null assertion is safe here due to requireAuth
+    try {
+      const user = c.var.user!; // Non-null assertion is safe here due to requireAuth
 
-    // Revoke all refresh tokens for this user
-    await AuthService.revokeAllUserRefreshTokens(user.id);
+      // Revoke all OAuth tokens for this user
+      await OAuthService.revokeOAuthTokens(user.id);
 
-    // Clear cookies
-    clearAuthCookies(c);
+      // Revoke all refresh tokens for this user
+      await AuthService.revokeAllUserRefreshTokens(user.id);
 
-    // Clear auth_status cookie
-    deleteCookie(c, "auth_status", {
-      ...getCookieOptions(),
-      httpOnly: false,
-    });
+      // Clear cookies
+      clearAuthCookies(c);
 
-    // Clear all client-side data
-    c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
+      // Clear auth_status cookie
+      deleteCookie(c, "auth_status", {
+        ...getCookieOptions(),
+        httpOnly: false,
+      });
 
-    return c.json({ success: true });
+      // Clear all client-side data
+      c.header("Clear-Site-Data", '"cache", "cookies", "storage"');
+
+      return c.json({ success: true });
+    } catch (error) {
+      return c.json({ success: false });
+    }
   });
 
   // Get current user
