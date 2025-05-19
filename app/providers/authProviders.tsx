@@ -27,6 +27,7 @@ import {
   syncServerAuth,
   selectLogoutInProgress,
   setLogoutInProgress,
+  resetLogoutProcess,
 } from "~/store/authSlice";
 import type { User } from "~/db/schema";
 
@@ -57,6 +58,7 @@ interface AuthContextValue {
   isLoggingOut: boolean;
   isRedirecting: boolean;
   refreshStatus: RefreshStatus;
+  resetLoginState: () => void;
 }
 
 // Create context dengan nilai default
@@ -75,8 +77,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshInProgressRef = useRef(false);
 
   // Local state
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+  const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
   const [lastRefreshAttempt, setLastRefreshAttempt] = useState<Date | null>(
     null
   );
@@ -115,6 +117,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [refresh, refreshResult] = useRefreshMutation();
   const [logout, logoutResult] = useLogoutMutation();
 
+  // Function to reset login state
+  const resetLoginState = useCallback(() => {
+    console.log("[AuthProvider] Resetting login state");
+    // Reset all logout related flags
+    redirectInProgressRef.current = false;
+    refreshInProgressRef.current = false;
+    setIsLoggingOut(false);
+    setIsRedirecting(false);
+    dispatch(resetLogoutProcess());
+  }, [dispatch]);
+
   // Log refresh errors
   useEffect(() => {
     if (refreshResult.isError) {
@@ -130,6 +143,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
   }, [refreshResult.isError, refreshResult.error, dispatch]);
+
+  // Check authentication status on mount - important for initial page load
+  useEffect(() => {
+    // Check if we have auth cookie but no authenticated state
+    if (
+      !isAuthenticated &&
+      hasAuthCookie() &&
+      !isLoggingOut &&
+      !logoutInProgress
+    ) {
+      // Reset any stale logout flags that might be preventing login
+      resetLoginState();
+
+      // Attempt to fetch user data
+      console.log(
+        "[AuthProvider] Have auth cookie but no auth state, fetching user data"
+      );
+      refetchMe().catch((err) =>
+        console.error("[AuthProvider] Error fetching initial user data:", err)
+      );
+    }
+  }, [
+    isAuthenticated,
+    isLoggingOut,
+    logoutInProgress,
+    refetchMe,
+    resetLoginState,
+  ]);
 
   // Check if token should be refreshed
   const shouldRefreshToken = useCallback(() => {
@@ -234,6 +275,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             !redirectInProgressRef.current &&
             !refreshInProgressRef.current
           ) {
+            // Reset any stale logout flags
+            resetLoginState();
+
             refetchMe().catch((err) => {
               console.error("[AuthProvider] Error fetching user data:", err);
             });
@@ -270,6 +314,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoggingOut,
     isRedirecting,
     logoutInProgress,
+    resetLoginState,
   ]);
 
   // Sync server data to Redux store on initial load
@@ -283,6 +328,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       !redirectInProgressRef.current
     ) {
       console.log("[AuthProvider] Syncing server auth data to Redux store");
+
+      // Reset any stale logout flags first
+      resetLoginState();
+
       dispatch(
         syncServerAuth({
           user: serverAuth.user,
@@ -298,6 +347,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoggingOut,
     isRedirecting,
     logoutInProgress,
+    resetLoginState,
   ]);
 
   // CONSOLIDATED TOKEN REFRESH EFFECT - This is the main refresh mechanism
@@ -339,6 +389,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
           // Use unwrap for consistent error handling
           const result = await refresh().unwrap();
+
+          // Reset any stale logout flags
+          resetLoginState();
 
           // Double check we're still authenticated and not in logout process
           if (
@@ -409,6 +462,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoggingOut,
     isRedirecting,
     logoutInProgress,
+    resetLoginState,
   ]);
 
   // COMPLETELY REVISED logout handler
@@ -443,7 +497,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // 4. Final redirect
         console.log("[AuthProvider] 4. Redirecting to login page");
         window.location.href = "/login";
-      }, 100);
+      }, 500);
     } catch (error) {
       console.error("[AuthProvider] Unexpected error during logout:", error);
       // Ensure we still redirect in case of error
@@ -460,12 +514,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       !redirectInProgressRef.current &&
       !refreshInProgressRef.current
     ) {
+      // Reset any stale logout flags first
+      resetLoginState();
+
       refetchMe().catch((err) =>
         console.error("[AuthProvider] Error in syncAuth:", err)
       );
       revalidator.revalidate();
     }
-  }, [refetchMe, revalidator, isLoggingOut, isRedirecting, logoutInProgress]);
+  }, [
+    refetchMe,
+    revalidator,
+    isLoggingOut,
+    isRedirecting,
+    logoutInProgress,
+    resetLoginState,
+  ]);
 
   // Manual token refresh with improved error handling
   const manualRefreshToken = useCallback(async () => {
@@ -499,6 +563,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       console.log("[AuthProvider] Manual refresh token requested");
       refreshInProgressRef.current = true;
       setLastRefreshAttempt(new Date());
+
+      // Reset any stale logout flags first
+      resetLoginState();
 
       const result = await refresh().unwrap();
 
@@ -563,6 +630,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoggingOut,
     isRedirecting,
     logoutInProgress,
+    resetLoginState,
   ]);
 
   // Buat value untuk context
@@ -582,6 +650,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     expiresAt,
     isLoggingOut: isLoggingOut || logoutInProgress,
     isRedirecting,
+    resetLoginState,
     // Add debug info
     refreshStatus: {
       lastAttempt: lastRefreshAttempt,

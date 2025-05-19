@@ -6,7 +6,11 @@ import {
   type RootState,
 } from "@reduxjs/toolkit/query/react";
 import type { User } from "~/db/schema";
-import { clearCredentials, setCredentials } from "./authSlice";
+import {
+  clearCredentials,
+  setCredentials,
+  resetLogoutProcess,
+} from "./authSlice";
 
 // Tipe untuk response login
 export interface LoginResponse {
@@ -163,6 +167,9 @@ export const authApi = createApi({
         try {
           const { data } = await queryFulfilled;
 
+          // Reset logout flag on successful ME query
+          dispatch(resetLogoutProcess());
+
           // Use the helper function again to check logout status
           if (data.success && data.user && !isLogoutInProgress(getState())) {
             const currentUser = getCurrentUser(getState());
@@ -258,6 +265,9 @@ export const authApi = createApi({
         try {
           const { data } = await queryFulfilled;
           console.log("Refresh token fulfilled:", data);
+
+          // Reset logout flag on successful refresh
+          dispatch(resetLogoutProcess());
 
           // Double check we're not in logout process
           if (isLogoutInProgress(getState())) {

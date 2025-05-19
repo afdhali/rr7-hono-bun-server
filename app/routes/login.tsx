@@ -1,4 +1,4 @@
-// routes/login.tsx (Updated with Google Login)
+// routes/login.tsx (Updated with Google Login and Fix for logoutInProgress)
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,8 +12,9 @@ import {
 } from "react-router";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
-import { setCredentials } from "~/store/authSlice";
+import { setCredentials, resetLogoutProcess } from "~/store/authSlice";
 import { useRefreshMutation } from "~/store/authApi";
+import { useAuth } from "~/providers/authProviders";
 import type { Route } from "./+types/login";
 import type { User } from "~/db/schema";
 
@@ -129,6 +130,9 @@ export default function Login() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  // Access auth context to use resetLoginState
+  const auth = useAuth();
+
   // Gunakan RTKQ refresh mutation untuk token refresh
   const [refresh] = useRefreshMutation();
 
@@ -142,8 +146,23 @@ export default function Login() {
   // Tambahkan state untuk loading
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  // Reset any logout flags when login page loads
+  useEffect(() => {
+    console.log("[Login] Resetting any stale logout flags");
+    // Explicitly reset logout process when login page loads
+    dispatch(resetLogoutProcess());
+
+    // Also use the auth context's resetLoginState for completeness
+    if (auth && auth.resetLoginState) {
+      auth.resetLoginState();
+    }
+  }, [dispatch, auth]);
+
   // Handle OAuth login
   const handleGoogleLogin = () => {
+    // Reset logout flags before OAuth login
+    dispatch(resetLogoutProcess());
+
     // Redirect ke endpoint Google OAuth
     const apiUrl = process.env.APP_URL || window.location.origin;
     const redirectURI = apiUrl + "/api/auth/google";
@@ -166,6 +185,12 @@ export default function Login() {
 
   // Form validation handler dengan loading state
   const validateForm = async (event: React.FormEvent<HTMLFormElement>) => {
+    // Reset any logout flags before trying to login
+    dispatch(resetLogoutProcess());
+    if (auth && auth.resetLoginState) {
+      auth.resetLoginState();
+    }
+
     // Set loading state
     setIsLoading(true);
 
@@ -202,6 +227,9 @@ export default function Login() {
     const refreshTimer = setTimeout(async () => {
       console.log("Refreshing token with RTKQ...");
       try {
+        // Reset any logout flags before attempting refresh
+        dispatch(resetLogoutProcess());
+
         const result = await refresh().unwrap();
 
         if (result.success) {
@@ -227,6 +255,9 @@ export default function Login() {
   // Redirect based on action data
   useEffect(() => {
     if (actionData?.success && actionData.redirectTo) {
+      // Make sure we've reset any logout flags
+      dispatch(resetLogoutProcess());
+
       // Jika ada user dan expiresAt, setup Redux dan token refresh
       if (actionData.user && actionData.expiresAt) {
         // Update Redux store dengan data auth
@@ -491,6 +522,13 @@ export default function Login() {
                 onClick={async () => {
                   console.log("Debug: Manual auth check");
                   console.log("Cookies:", document.cookie);
+
+                  // Reset any logout flags before manual check
+                  dispatch(resetLogoutProcess());
+                  if (auth && auth.resetLoginState) {
+                    auth.resetLoginState();
+                  }
+
                   try {
                     const response = await fetch("/api/auth/me", {
                       credentials: "include",

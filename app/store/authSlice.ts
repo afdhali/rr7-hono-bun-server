@@ -9,6 +9,9 @@ export const setLogoutInProgress = createAction<boolean>(
   "auth/setLogoutInProgress"
 );
 
+// Create action untuk reset logout status
+export const resetLogoutProcess = createAction("auth/resetLogoutProcess");
+
 // PENTING: Definisi AuthState harus menyertakan logoutInProgress
 export interface AuthState {
   user: Omit<User, "passwordHash"> | null;
@@ -56,15 +59,14 @@ export const authSlice = createSlice({
         source?: "server" | "client";
       }>
     ) => {
-      // Only set credentials if not in logout process
-      if (!state.logoutInProgress) {
-        state.user = action.payload.user;
-        state.expiresAt = action.payload.expiresAt;
-        state.source = action.payload.source || "client";
+      // Reset logout in progress flag on successful login
+      state.logoutInProgress = false;
+      state.user = action.payload.user;
+      state.expiresAt = action.payload.expiresAt;
+      state.source = action.payload.source || "client";
 
-        // Update last successful refresh
-        state.lastSuccessfulRefresh = new Date().toISOString();
-      }
+      // Update last successful refresh
+      state.lastSuccessfulRefresh = new Date().toISOString();
     },
     clearCredentials: (state) => {
       // Set logout in progress flag
@@ -92,6 +94,8 @@ export const authSlice = createSlice({
         state.user = action.payload.user;
         state.expiresAt = action.payload.expiresAt;
         state.source = "server";
+        // Reset logout flag jika mendapatkan auth dari server
+        state.logoutInProgress = false;
       }
     },
   },
@@ -99,6 +103,11 @@ export const authSlice = createSlice({
     // Handle the setLogoutInProgress action
     builder.addCase(setLogoutInProgress, (state, action) => {
       state.logoutInProgress = action.payload;
+    });
+
+    // Handle resetLogoutProcess action
+    builder.addCase(resetLogoutProcess, (state) => {
+      state.logoutInProgress = false;
     });
 
     // Handle the setRefreshInProgress action
@@ -129,6 +138,8 @@ export const authSlice = createSlice({
             ).toISOString();
           }
           state.source = "client";
+          // Reset logout flag pada sukses auth
+          state.logoutInProgress = false;
         }
         state.isLoading = false;
       }
@@ -151,6 +162,8 @@ export const authSlice = createSlice({
         if (!state.logoutInProgress && payload.success) {
           state.expiresAt = payload.expiresAt;
           state.lastSuccessfulRefresh = new Date().toISOString();
+          // Reset logout flag pada sukses refresh
+          state.logoutInProgress = false;
         }
         state.isLoading = false;
         state.refreshInProgress = false;

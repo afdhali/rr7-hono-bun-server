@@ -15,6 +15,8 @@ import {
   type AuthLoaderData,
 } from "~/utils/authLoaders";
 import type { Route } from "./+types/layout";
+import { useDispatch } from "react-redux";
+import { resetLogoutProcess } from "~/store/authSlice";
 
 // Type for loader data
 export type LayoutLoaderData = AuthLoaderData;
@@ -120,15 +122,30 @@ export default function Layout() {
     logout,
     expiresAt,
     refreshStatus,
+    resetLoginState,
   } = useAuth();
 
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   // Get data from loader using useLoaderData
   const loaderData = useLoaderData<LayoutLoaderData>();
   // Handle null loaderData with fallback values
   const source = loaderData?.source || "unknown";
+
+  // Reset any stale logout flags on layout mount
+  useEffect(() => {
+    // Don't reset if on login page
+    if (location.pathname !== "/login" && !isLoggingOut) {
+      console.log("[AboutLayout] Resetting any stale logout flags");
+      dispatch(resetLogoutProcess());
+
+      if (resetLoginState) {
+        resetLoginState();
+      }
+    }
+  }, [dispatch, location.pathname, isLoggingOut, resetLoginState]);
 
   // Guard pattern in layout
   useEffect(() => {

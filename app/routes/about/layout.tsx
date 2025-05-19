@@ -11,6 +11,8 @@ import Navbar from "~/components/Navbar";
 
 import type { Route } from "./+types/layout";
 import { useAuth } from "~/providers/authProviders";
+import { useDispatch } from "react-redux";
+import { resetLogoutProcess } from "~/store/authSlice";
 import {
   createClientAuthLoader,
   type AuthLoaderData,
@@ -120,15 +122,30 @@ export default function Layout() {
     logout,
     expiresAt,
     refreshStatus,
+    resetLoginState,
   } = useAuth();
 
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   // Get data from loader using useLoaderData
   const loaderData = useLoaderData<LayoutLoaderData>();
   // Handle null loaderData with fallback values
   const source = loaderData?.source || "unknown";
+
+  // Reset any stale logout flags on layout mount
+  useEffect(() => {
+    // Don't reset if on login page
+    if (location.pathname !== "/login" && !isLoggingOut) {
+      console.log("[AboutLayout] Resetting any stale logout flags");
+      dispatch(resetLogoutProcess());
+
+      if (resetLoginState) {
+        resetLoginState();
+      }
+    }
+  }, [dispatch, location.pathname, isLoggingOut, resetLoginState]);
 
   // Guard pattern in layout
   useEffect(() => {
@@ -190,7 +207,8 @@ export default function Layout() {
                   {refreshStatus.lastSuccess && (
                     <span className="ml-2">
                       (Last refresh:{" "}
-                      {refreshStatus.lastSuccess.toLocaleTimeString()})
+                      {new Date(refreshStatus.lastSuccess).toLocaleTimeString()}
+                      )
                     </span>
                   )}
                 </div>
